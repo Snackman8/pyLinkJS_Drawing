@@ -1,0 +1,51 @@
+<head>
+    <!-- jquery (requires for pyLinkJS) -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.1/dist/jquery.min.js"></script>
+
+    <!-- bootstrap (requires for pyLinkJS UI Helpers) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.1/dist/js/bootstrap.bundle.min.js"></script>
+
+
+</head>
+
+<body>
+  <canvas id="Canvas1" style="display:none; border: solid 1px black;" width="500" height="500"></canvas>
+  <canvas id="Canvas2" style="border: solid 1px black;" width="500" height="500"></canvas>
+  <br>
+  <button onclick="call_py('button_clicked', 'param1', 'param2');">Click me</button>
+
+<script>
+  function resize() {
+    /** resize handler **/
+    width = window.innerWidth * 0.95;
+    height = window.innerHeight * 0.95;
+    canvas1.width = width;
+    canvas2.width = width;
+    canvas1.height = height;
+    canvas2.height = height;
+  }
+
+
+$( document ).ready(function() {
+
+  // initialize the canvas
+  canvas_init('Canvas1', 'Canvas2');
+
+  // store the canvas and contexts in global variables
+  canvas1 = document.getElementById('Canvas1');
+  ctx1 = canvas1.getContext("2d");
+  canvas2 = document.getElementById('Canvas2');
+  ctx2 = canvas2.getContext("2d");
+
+  // force an initial resize on window load
+  resize();
+
+  // install a resize handler whenever the window is resized
+  $(window).on("resize", function() { resize(); });
+});    
+  
+</script>
+
+
+</body>
