@@ -47,6 +47,12 @@ def compute_zoom(canvas_width, canvas_height, image_width, image_height):
 # --------------------------------------------------
 #    Event Handlers
 # --------------------------------------------------
+def layer_clicked(jsc, layer):
+    """ show or hide layers """
+    checked = jsc.eval_js_code(f"""$('#chk_{layer}').is(":checked")""")
+    LAYER_CONTROLLER._layer_datarenderers[layer].visible = checked
+
+
 def onmouseup(jsc, x, y, button):
     """ print out the click coordinate """
     global DATA_CLICK_INDEX
@@ -103,6 +109,12 @@ def ready(jsc, *args):
     for dr in LAYER_CONTROLLER._layer_datarenderers.values():
         dr.layer_init(image_obj)
 
+    # generate html for layer selection
+    html = ''
+    for dr in LAYER_CONTROLLER._layer_datarenderers.values():
+        html += f"""<input type="checkbox" id="chk_{dr.name}" name="chk_{dr.name}" value="{dr.name}" onclick="call_py('layer_clicked', '{dr.name}');" checked>{dr.name}<br>"""
+    jsc['#layers'].html = html
+
     # render
     f.render(jsc)
 
@@ -111,40 +123,59 @@ def ready(jsc, *args):
 #    Layer Implementation
 # --------------------------------------------------
 class LDS_Example_Values(LayerDataSource):
-    def __init__(self, cooldown_period=0):
+#    FAKE_DATA = pd.DataFrame(columns=['Value', 'Value_ts', 'PrevValue', 'FirstSeen_ts'], index=[f'D-{i}' for i in range(1, 15)]).fillna(0)
+    
+    def __init__(self, cooldown_period=5):
         """ init """
         super().__init__(name='ExampleValues', cooldown_period=cooldown_period)
-    
+
     @classmethod
     def data_fetch(cls):
         """ fake fetch data """
-        time.sleep(0.1)
-        idx = []
-        values = []
-        ts = []
-        for _ in range(0, random.randint(6, 13)):
-            idx.append(f'D-{random.randint(1,13)}')
-            values.append(random.randint(0, 200))
-            ts.append(datetime.datetime.now())
-        df = pd.DataFrame(data={'Value': values, 'index': idx, 'Value_ts': ts}).set_index('index').drop_duplicates()
+        time.sleep(1)        
+        # hacky way to make fake persistent data
+        try:
+            df = pd.read_csv('Values.csv', index_col=0)
+        except:
+            print('Error!')
+            df = pd.DataFrame(columns=['Value', 'Value_ts', 'PrevValue', 'FirstSeen_ts'], index=[f'D-{i}' for i in range(1, 15)]).fillna(0)
+        
+        # save the previous values
+        df.index.name = 'index'
+        df['Value_ts'] = pd.to_datetime(df['Value_ts'])
+        df['FirstSeen_ts'] = pd.to_datetime(df['FirstSeen_ts'])
+        df['PrevValue'] = df['Value']
+
+        # update the values
+        for _ in range(0, random.randint(1, 6)):
+            idx = f'D-{random.randint(1, 14)}'
+            df.loc[idx, 'Value'] = random.randint(0, 200)
+            df.loc[idx, 'Value_ts'] = datetime.datetime.now() - datetime.timedelta(minutes=random.randint(1, 10))
+
+        # fix the firstSeen_ts as needed
+        df.loc[df['Value'] != df['PrevValue'], 'FirstSeen_ts'] = datetime.datetime.now()
+
+        # save
+        df.to_csv('Values.csv')
+            
         return df
 
 
 class LDS_Example_Open(LayerDataSource):
-    def __init__(self, cooldown_period=0):
+    def __init__(self, cooldown_period=5):
         """ init """
         super().__init__(name='ExampleOpen', cooldown_period=cooldown_period)
-    
+
     @classmethod
     def data_fetch(cls):
         """ fake fetch data """
-        time.sleep(0.1)
+        time.sleep(10)
         idx = []
         open_vals = []
         for _ in range(0, random.randint(12, 13)):
             idx.append(f'D-{random.randint(1,13)}')
             open_vals.append(random.choice([True, False]))
-        df = pd.DataFrame(data={'Open': open_vals, 'index': idx}).drop_duplicates(subset='index', keep='last').set_index('index')        
+        df = pd.DataFrame(data={'Open': open_vals, 'index': idx}).drop_duplicates(subset='index', keep='last').set_index('index')
         return df
 
 
@@ -159,17 +190,17 @@ class LR_Example_Circle(LayerRenderer):
         df = self._data_dict_to_df(data_dict)
 
         if 'Value' in df.columns:
-            df['Value'] = df['Value'].fillna(0) 
+            df['Value'] = df['Value'].fillna(0)
             # compute the radius and color of the circle
             df['circle_radius'] = df.apply(lambda x: max(3, x['Value'] / 20.0), axis=1)
             df['circle_fillStyle'] = 'rgba(0, 255, 0, 0.2)'
             df.loc[df['Value'] < 20, 'circle_fillStyle'] = 'rgba(255, 0, 255, 0.2)'
 
         if 'Open' in df.columns:
-            df['Open'] = df['Open'].fillna(False) 
+            df['Open'] = df['Open'].fillna(False)
             df.loc[~(df['Open'] == True), 'circle_radius'] = 2
             df.loc[~(df['Open'] == True), 'circle_fillStyle'] = 'rgba(192, 192, 192, 0.5)'
-    
+
         self._data = df
 
     def render(self, parentObj):
@@ -178,6 +209,7 @@ class LR_Example_Circle(LayerRenderer):
 
         for idx, r in self._data.iterrows():
             if (circleObj := parentObj.children.get(f'CIRCLE_{idx}', None)) is not None:
+                circleObj.props['visible'] = self.visible
                 circleObj.props['radius'] = r['circle_radius']
                 circleObj.props['fillStyle'] = r['circle_fillStyle']
 
@@ -196,21 +228,19 @@ class LR_Example_Text(LayerRenderer):
         df['text_font'] = '8pt Arial'
 
         if 'Value' in df.columns:
-            df['Value'] = df['Value'].fillna(0) 
+            df['Value'] = df['Value'].fillna(0)
             df['text_str'] = df['Value'].astype('int').astype('str')
 
-            # d = datetime.datetime.now()
-            # for idx, r in df.iterrows():
-            #     print(pd.Timedelta(d - r['Value_ts']).seconds)
-            #     if pd.Timedelta(d - r['Value_ts']).seconds < 5:
-            #         df.loc[idx, 'textFillStyle'] = 'black'
-            #         df.loc[idx, 'font'] = '22pt Arial'
-            #     else:
-            #         df.loc[idx, 'textFillStyle'] = 'black'
-            #         df.loc[idx, 'font'] = '8pt Arial'
+            for idx, r in df.iterrows():
+                if (datetime.datetime.now() - r['FirstSeen_ts']).seconds < 5:
+                    df.loc[idx, 'text_fillStyle'] = 'blue'
+                    df.loc[idx, 'text_font'] = '12pt Arial'
+                else:
+                    df.loc[idx, 'text_fillStyle'] = 'black'
+                    df.loc[idx, 'text_font'] = '8pt Arial'
 
         if 'Open' in df.columns:
-            df['Open'] = df['Open'].fillna(False) 
+            df['Open'] = df['Open'].fillna(False)
             df.loc[~(df['Open'] == True), 'text_str'] = ''
 
         self._data = df
@@ -221,6 +251,7 @@ class LR_Example_Text(LayerRenderer):
 
         for idx, r in self._data.iterrows():
             if (textObj := parentObj.children.get(f'TEXT_{idx}', None)) is not None:
+                textObj.props['visible'] = self.visible
                 textObj.props['text_str'] = r['text_str']
                 textObj.props['fillStyle'] = r['text_fillStyle']
                 textObj.props['font'] = r['text_font']
@@ -234,6 +265,7 @@ def start_threaded_automatic_update():
     def thread_worker():
         # init
         last_render_refresh_time = 0
+        last_status_refresh_time = 0
 
         # loop forever
         while True:
@@ -242,18 +274,25 @@ def start_threaded_automatic_update():
             # refresh the data visually if needed
             if (t - last_render_refresh_time) > 0.1:
                 for jsc in get_broadcast_jsclients('/'):
-
+            
                     # refresh the render objects associated with the data
                     if 'ROOT_RENDER_OBJECT' in jsc.tag:
-                        image_obj = jsc.tag['ROOT_RENDER_OBJECT'].children['img']                        
+                        image_obj = jsc.tag['ROOT_RENDER_OBJECT'].children['img']
                         LAYER_CONTROLLER.render(image_obj)
-
+            
                         f = JSDraw('ctx1', 'ctx2')
                         f.fillStyle = 'white'
                         f.clear()
                         jsc.tag['ROOT_RENDER_OBJECT'].render(f, t)
                         f.render(jsc)
                 last_render_refresh_time = time.time()
+            
+            # refresh the status if needed
+            if (t - last_status_refresh_time) > 1:
+                for jsc in get_broadcast_jsclients('/'):
+                    print('REFRESH')
+                    jsc['#datasources'].html = LAYER_CONTROLLER.get_datasource_status_messages()
+                last_status_refresh_time = time.time()
 
             # sleep 10ms
             time.sleep(0.01)
@@ -272,14 +311,14 @@ def main(args):
     # init the google oauth2 plugin
     drawing_plugin = pluginDrawing('ctx1', 'ctx2')
 
-    LAYER_CONTROLLER = LayerController(minimum_datasource_cooldown_period=0.1)
+    LAYER_CONTROLLER = LayerController(minimum_datasource_cooldown_period=3)
 
     # read the data coordinate file
     data_coord_file = os.path.join(os.path.dirname(__file__), args['data_coordinate_file'])
     df_data_coords = pd.read_csv(data_coord_file, index_col=0)
     lds_data_coords = LayerDataSource(name='data_coords', next_fire_time=None, initial_data=df_data_coords)
-    lds_value = LDS_Example_Values()
-    lds_open = LDS_Example_Open()
+    lds_value = LDS_Example_Values(cooldown_period=1)
+    lds_open = LDS_Example_Open(cooldown_period=1)
     LAYER_CONTROLLER._layer_datasources[lds_data_coords.name] = lds_data_coords
     LAYER_CONTROLLER._layer_datasources[lds_value.name] = lds_value
     LAYER_CONTROLLER._layer_datasources[lds_open.name] = lds_open

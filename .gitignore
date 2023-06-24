@@ -1,7 +1,7 @@
 .project
 .pydevproject
 nocommit
-
+examples/Values.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

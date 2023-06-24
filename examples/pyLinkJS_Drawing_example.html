@@ -10,20 +10,31 @@
 </head>
 
 <body>
+  <h1>Demo App</h1>
   <canvas id="Canvas1" style="display:none; border: solid 1px black;" width="500" height="500"></canvas>
-  <canvas id="Canvas2" style="border: solid 1px black;" width="500" height="500"></canvas>
-  <br>
-  <button onclick="call_py('button_clicked', 'param1', 'param2');">Click me</button>
+  <canvas id="Canvas2" style="border: solid 1px black; margin-left: 10px; margin-top:10px" width="500" height="500"></canvas>
+  <div id="right_pane" style="position: absolute; top: 10px; left: 400px; padding: 4px 4px 4px 4px;">
+    <h2>Layers</h2>
+    <div id="layers"></div>
+
+    <h2>DataSources</h2>
+    <div id="datasources"></div>
+  </div>
 
 <script>
   function resize() {
     /** resize handler **/
-    width = window.innerWidth * 0.95;
-    height = window.innerHeight * 0.95;
+    width = window.innerWidth - 20 - 200;
+    height = window.innerHeight - 100;
     canvas1.width = width;
     canvas2.width = width;
     canvas1.height = height;
     canvas2.height = height;
+
+    $('#right_pane').css('top', '70px');
+    $('#right_pane').css('left', width + 10);
+    $('#right_pane').css('width', 200);
+    $('#right_pane').css('height', height);
   }
 
 
@@ -43,8 +54,8 @@ $( document ).ready(function() {
 
   // install a resize handler whenever the window is resized
   $(window).on("resize", function() { resize(); });
-});    
-  
+});
+
 </script>
 
 
