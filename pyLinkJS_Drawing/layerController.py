@@ -3,6 +3,7 @@
 # --------------------------------------------------
 import concurrent.futures
 import datetime
+import logging
 import threading
 import time
 import traceback
@@ -175,7 +176,7 @@ class LayerController:
             try:
                 dr.render(parentObj)
             except:
-                print(traceback.format_exc())
+                logging.error(traceback.format_exc())
 
     def _thread_worker(self):
         """ thread worker, coordinate data fetches """
@@ -211,9 +212,9 @@ class LayerController:
                     try:
                         ds.set_data(futures[k].result())
                     except:
-                        print(traceback.format_exc())
+                        logging.error(traceback.format_exc())
                     del futures[k]
-                    print(ds.name, 'data ready')
+                    logging.info(f"""{ds.name} data ready""")
                     ds.next_fire_time = ds.data_last_fetch_time + datetime.timedelta(seconds=max(ds.cooldown_period, self.minimum_datasource_cooldown_period))
 
                     # notify renderers that the data has changed
@@ -230,7 +231,7 @@ class LayerController:
                     try:
                         dr.on_data_changed(data_dict)
                     except:
-                        print(traceback.format_exc())
+                        logging.error(traceback.format_exc())
 
                 # one second frequency
                 time.sleep(1)
