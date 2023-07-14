@@ -482,7 +482,7 @@ class RenderObject():
         self.prerender(f, t)
 
         # render the children
-        for v in self.children.values():
+        for v in list(self.children.values()):
             v.render(f, t)
 
         # call customrender
