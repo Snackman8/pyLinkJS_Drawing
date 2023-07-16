@@ -7,6 +7,11 @@ var RENDER_CODE = '';
 var DRAG_START_COORD_X = 0;
 var DRAG_START_COORD_Y = 0;
 var IS_DRAGGING = false;
+var LAST_MOUSE_WX = 0;
+var LAST_MOUSE_WY = 0;
+var LAST_MOUSE_PX = 0;
+var LAST_MOUSE_PY = 0;
+var LAST_MOUSE_TIME = 0;
 
 
 // --------------------------------------------------
@@ -92,6 +97,22 @@ function canvas_init(canvas_working_id, canvas_display_id) {
         call_py_optional('onmouseup', wx, wy, e.button);
     });
 
+    // Handle Mouse Move for tool tips
+    $('#' + canvas_display_id).mousemove(function(e) {
+        let drect = cand.getBoundingClientRect();
+        let dx = e.pageX - drect.left;
+        let dy = e.pageY - drect.top;
+        let tm = ctxw.getTransform();
+        let wx = (dx - tm.e) / tm.a;
+        let wy = (dy - tm.f) / tm.d;
+        LAST_MOUSE_WX = wx;
+        LAST_MOUSE_WY = wy;
+        LAST_MOUSE_PX = e.pageX;
+        LAST_MOUSE_PY = e.pageY;
+        var d = new Date();
+        LAST_MOUSE_TIME = d.getTime();
+    });
+
     // Handle mouse wheel for zooming
     $('#' + canvas_display_id).bind('mousewheel', function(e) {
         let drect = cand.getBoundingClientRect();
@@ -164,4 +185,15 @@ function render(code) {
 
 function rerender() {
     eval(RENDER_CODE);
+}
+
+
+// --------------------------------------------------
+//  Mouse Query
+// --------------------------------------------------
+function mouse_get_last_position() {
+    var d = new Date();
+    var elapsed_ms = d.getTime() - LAST_MOUSE_TIME;
+    
+    return {'wx': LAST_MOUSE_WX, 'wy': LAST_MOUSE_WY, 'px': LAST_MOUSE_PX, 'py': LAST_MOUSE_PY, 'elapsed_ms': elapsed_ms};    
 }

@@ -67,6 +67,12 @@ class LayerRenderer():
         # success!
         return df
 
+    def get_options(self):
+        return []
+
+    def get_tooltip(self, wx, wy, rolist):
+        return ''
+
     def layer_init(self):
         """ Initialize render objects
 
@@ -162,6 +168,20 @@ class LayerController:
 
         return html
 
+    def build_options_html(self, jsc):
+        html = ''
+        opts = {}
+        for dr in self._layer_datarenderers.values():
+            for opt in dr.get_options():
+                if opt['type'] == 'Boolean':
+                    checked = ''
+                    if opt['default_value']:
+                        checked = 'checked'
+                    html += f"""<input type="checkbox" id="opt_{opt['id']}" name="opt_{opt['id']}" value="{opt['id']}" onclick="call_py('options_changed');" {checked}>{opt['text']}<br>"""
+                    opts[opt['id']] = opt['default_value']
+        jsc.tag['options'] = opts
+        return html
+
     def get_datasource_status_messages(self):
         keys = list(self._layer_datasources.keys())
         status_html = ''
@@ -169,14 +189,34 @@ class LayerController:
             status_html += self._status_message_for_datasource(self._layer_datasources[k])
         return status_html
 
+    def get_tooltip(self, layer_names, tooltip_idx):
+        html = ''
+        for name in layer_names:
+            if name in self._layer_datarenderers:
+                try:
+                    html += self._layer_datarenderers[name].get_tooltip(tooltip_idx)
+                except Exception as e:
+                    html += repr(e) + '<br>' 
+        return html
 
-    def render(self, parentObj):
+    def render(self, parentObj, options):
         # notify renderers that data source has been updated
         for dr in self._layer_datarenderers.values():
             try:
-                dr.render(parentObj)
+                dr.render(parentObj, options)
             except:
                 logging.error(traceback.format_exc())
+
+    def update_options(self, jsc):
+        # read back all of the options
+        opts = {}
+        for dr in self._layer_datarenderers.values():
+            for opt in dr.get_options():
+                if opt['type'] == 'Boolean':
+                    optval = jsc.eval_js_code(f"""$('#opt_{opt['id']}').is(":checked")""")
+                    opts[opt['id']] = optval
+        print(opts)
+        jsc.tag['options'] = opts
 
     def _thread_worker(self):
         """ thread worker, coordinate data fetches """

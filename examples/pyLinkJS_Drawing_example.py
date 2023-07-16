@@ -47,25 +47,40 @@ def compute_zoom(canvas_width, canvas_height, image_width, image_height):
 # --------------------------------------------------
 #    Event Handlers
 # --------------------------------------------------
-def layer_clicked(jsc, layer):
-    """ show or hide layers """
-    checked = jsc.eval_js_code(f"""$('#chk_{layer}').is(":checked")""")
-    LAYER_CONTROLLER._layer_datarenderers[layer].visible = checked
-
-
 def onmouseup(jsc, x, y, button):
     """ print out the click coordinate """
     global DATA_CLICK_INDEX
+
     if (button == 0):
         print(f'{DATA_CLICK_PREFIX}-{DATA_CLICK_INDEX},{int(x)},{int(y)}')
         DATA_CLICK_INDEX = DATA_CLICK_INDEX + 1
 
-        t = time.time()
+        if 'ROOT_RENDER_OBJECT' in jsc.tag:
+            # check if we need to move the tool tip
+            mlp = jsc.eval_js_code(f"""mouse_get_last_position();""")
+            if mlp is not None:
+                t = time.time()
+                rolist = jsc.tag['ROOT_RENDER_OBJECT'].point_in_obj(mlp['wx'], mlp['wy'], t)
 
-        ro = jsc.tag['ROOT_RENDER_OBJECT'].point_in_obj(x, y, t)
-        if hasattr(ro, 'click_handler'):
-            ro.click_handler(ro)
-            return
+
+                # assemble a layer list
+                tooltip_idx = None
+                layer_names = set()
+                for ro in rolist:
+                    if 'layer_name' in ro.props:
+                        layer_names.add(ro.props['layer_name'])
+                        if 'idx' in ro.props:
+                            tooltip_idx = ro.props['idx']
+
+                jsc.tag['property_window'] = {'layer_names': layer_names, 'idx': tooltip_idx}
+
+                html = LAYER_CONTROLLER.get_tooltip(layer_names, tooltip_idx)
+                jsc['#properties'].html = html
+
+
+def options_changed(jsc, *args):
+    LAYER_CONTROLLER.update_options(jsc)
+
 
 def ready(jsc, *args):
     """ called when a webpage creates a new connection the first time on load """
@@ -110,13 +125,17 @@ def ready(jsc, *args):
         dr.layer_init(image_obj)
 
     # generate html for layer selection
-    html = ''
-    for dr in LAYER_CONTROLLER._layer_datarenderers.values():
-        html += f"""<input type="checkbox" id="chk_{dr.name}" name="chk_{dr.name}" value="{dr.name}" onclick="call_py('layer_clicked', '{dr.name}');" checked>{dr.name}<br>"""
-    jsc['#layers'].html = html
+    jsc['#options'].html = LAYER_CONTROLLER.build_options_html(jsc)
+    LAYER_CONTROLLER.update_options(jsc)
 
     # render
     f.render(jsc)
+
+
+def reconnect(jsc, *args):
+    """ called when a webpage automatically reconnects a broken connection """
+    print('Reconnect', args)
+    ready(jsc)
 
 
 # --------------------------------------------------
@@ -124,7 +143,7 @@ def ready(jsc, *args):
 # --------------------------------------------------
 class LDS_Example_Values(LayerDataSource):
 #    FAKE_DATA = pd.DataFrame(columns=['Value', 'Value_ts', 'PrevValue', 'FirstSeen_ts'], index=[f'D-{i}' for i in range(1, 15)]).fillna(0)
-    
+
     def __init__(self, cooldown_period=5):
         """ init """
         super().__init__(name='ExampleValues', cooldown_period=cooldown_period)
@@ -132,14 +151,14 @@ class LDS_Example_Values(LayerDataSource):
     @classmethod
     def data_fetch(cls):
         """ fake fetch data """
-        time.sleep(1)        
+        time.sleep(1)
         # hacky way to make fake persistent data
         try:
             df = pd.read_csv('Values.csv', index_col=0)
         except:
             print('Error!')
             df = pd.DataFrame(columns=['Value', 'Value_ts', 'PrevValue', 'FirstSeen_ts'], index=[f'D-{i}' for i in range(1, 15)]).fillna(0)
-        
+
         # save the previous values
         df.index.name = 'index'
         df['Value_ts'] = pd.to_datetime(df['Value_ts'])
@@ -157,7 +176,7 @@ class LDS_Example_Values(LayerDataSource):
 
         # save
         df.to_csv('Values.csv')
-            
+
         return df
 
 
@@ -182,8 +201,21 @@ class LDS_Example_Open(LayerDataSource):
 class LR_Example_Circle(LayerRenderer):
     def layer_init(self, parentObj):
         for idx, r in self._data.iterrows():
-            circle_obj = CircleObject(name=f'CIRCLE_{idx}', x=r['x'], y=r['y'], radius=1, fillStyle='black', lineWidth=0.1)
+            circle_obj = CircleObject(name=f'CIRCLE_{idx}', x=r['x'], y=r['y'], radius=1, fillStyle='black', lineWidth=0.1, layer_name=self.name)
             parentObj.add_child(circle_obj)
+
+    def get_options(self):
+        return [{'id': 'circle', 'text': 'Example Circle', 'type': 'Boolean', 'default_value': True}]
+
+    def get_tooltip(self, tooltip_idx):
+#        idx = None
+        html = ''
+        # for ro in rolist:
+        #     if 'idx' in ro.props:
+        #         idx = ro.props['idx']
+        html += 'Radius: ' + str(self._data.loc[tooltip_idx].circle_radius) + '<br>'
+#                break
+        return html
 
     def on_data_changed(self, data_dict):
         # merge the data
@@ -203,22 +235,39 @@ class LR_Example_Circle(LayerRenderer):
 
         self._data = df
 
-    def render(self, parentObj):
+    def render(self, parentObj, options):
         if 'circle_radius' not in self._data.columns:
             return
 
+        visible = options['circle']
+
         for idx, r in self._data.iterrows():
             if (circleObj := parentObj.children.get(f'CIRCLE_{idx}', None)) is not None:
-                circleObj.props['visible'] = self.visible
+                circleObj.props['visible'] = visible
                 circleObj.props['radius'] = r['circle_radius']
                 circleObj.props['fillStyle'] = r['circle_fillStyle']
 
 
 class LR_Example_Text(LayerRenderer):
     def layer_init(self, parentObj):
+        click_width = 15
+        click_height = 12
         for idx, r in self._data.iterrows():
-            text_obj = TextObject(name=f'TEXT_{idx}', x=r['x'], y=r['y'], text_str='?', lineWidth=0.1, fillStyle='black', font='8pt Arial', textAlign='center', textBaseline='middle')
+            click_obj = RectObject(name=f'CLICK_{idx}', x=r['x'] - click_width / 2, y=r['y']- click_height / 2, width=click_width, height=click_height, strokeStyle='rgba(0, 0, 0, 0)', fillStyle='rgba(0, 0, 0, 0)', clickable=True, layer_name=self.name, idx=idx)
+            text_obj = TextObject(name=f'TEXT_{idx}', x=r['x'], y=r['y'], text_str='?', lineWidth=0.1, fillStyle='black', font='8pt Arial', textAlign='center', textBaseline='middle', layer_name=self.name, idx=idx)
+            parentObj.add_child(click_obj)
             parentObj.add_child(text_obj)
+
+    def get_options(self):
+        return [{'id': 'text', 'text': 'Example Text', 'type': 'Boolean', 'default_value': True},
+                {'id': 'always_red', 'text': 'Always Red', 'type': 'Boolean', 'default_value': False}]
+
+    def get_tooltip(self, tooltip_idx):
+        html = ''
+        html += tooltip_idx + '<br>'
+        html += 'Value: ' + str(self._data.loc[tooltip_idx].Value) + '<br>'
+        html += 'TimeStamp: ' + str(self._data.loc[tooltip_idx].Value_ts) + '<br>'
+        return html
 
     def on_data_changed(self, data_dict):
         # merge the data
@@ -245,16 +294,21 @@ class LR_Example_Text(LayerRenderer):
 
         self._data = df
 
-    def render(self, parentObj):
+    def render(self, parentObj, options):
         if 'text_fillStyle' not in self._data.columns:
             return
 
+        visible = options['text']
+
         for idx, r in self._data.iterrows():
             if (textObj := parentObj.children.get(f'TEXT_{idx}', None)) is not None:
-                textObj.props['visible'] = self.visible
+                textObj.props['visible'] = visible
                 textObj.props['text_str'] = r['text_str']
                 textObj.props['fillStyle'] = r['text_fillStyle']
                 textObj.props['font'] = r['text_font']
+
+                if options['always_red'] == True:
+                    textObj.props['fillStyle'] = 'red'
 
 
 # --------------------------------------------------
@@ -266,6 +320,8 @@ def start_threaded_automatic_update():
         # init
         last_render_refresh_time = 0
         last_status_refresh_time = 0
+        last_tooltip_check_time = 0
+        last_property_refresh_time = 0
 
         # loop forever
         while True:
@@ -274,23 +330,67 @@ def start_threaded_automatic_update():
             # refresh the data visually if needed
             if (t - last_render_refresh_time) > 0.1:
                 for jsc in get_broadcast_jsclients('/'):
-            
+
                     # refresh the render objects associated with the data
                     if 'ROOT_RENDER_OBJECT' in jsc.tag:
                         image_obj = jsc.tag['ROOT_RENDER_OBJECT'].children['img']
-                        LAYER_CONTROLLER.render(image_obj)
-            
+                        LAYER_CONTROLLER.render(image_obj, jsc.tag['options'])
+
                         f = JSDraw('ctx1', 'ctx2')
                         f.fillStyle = 'white'
                         f.clear()
                         jsc.tag['ROOT_RENDER_OBJECT'].render(f, t)
                         f.render(jsc)
                 last_render_refresh_time = time.time()
-            
+
+
+            if (t - last_tooltip_check_time) > 0.1:
+                for jsc in get_broadcast_jsclients('/'):
+                    if 'ROOT_RENDER_OBJECT' in jsc.tag:
+                        # check if we need to move the tool tip
+                        mlp = jsc.eval_js_code(f"""mouse_get_last_position();""")
+                        if mlp is not None:
+                            if mlp['elapsed_ms'] > 500:
+                                t = time.time()
+                                rolist = jsc.tag['ROOT_RENDER_OBJECT'].point_in_obj(mlp['wx'], mlp['wy'], t)
+
+                                # assemble a layer list
+                                tooltip_idx = None
+                                layer_names = set()
+                                for ro in rolist:
+                                    if 'layer_name' in ro.props:
+                                        layer_names.add(ro.props['layer_name'])
+                                        if 'idx' in ro.props:
+                                            tooltip_idx = ro.props['idx']
+
+                                html = LAYER_CONTROLLER.get_tooltip(layer_names, tooltip_idx)
+                                if html != '':
+                                    jsc['#tooltip'].html = html
+                                    jsc['#tooltip'].css.left = mlp['px']
+                                    jsc['#tooltip'].css.top = mlp['py']
+                                    jsc['#tooltip'].css.visibility = 'visible'
+                                    jsc['body'].css.cursor = 'crosshair'
+                                else:
+                                    jsc['#tooltip'].css.visibility = 'hidden'
+                                    jsc['body'].css.cursor = 'default'
+                            else:
+                                jsc['#tooltip'].css.visibility = 'hidden'
+                                jsc['body'].css.cursor = 'default'
+                last_tooltip_check_time = time.time()
+
+
+            # refresh property window if needed
+            if (t - last_property_refresh_time) > 1:
+                for jsc in get_broadcast_jsclients('/'):
+                    if 'property_window' in jsc.tag:
+                        layer_names = jsc.tag['property_window']['layer_names']
+                        idx = jsc.tag['property_window']['idx']
+                        html = LAYER_CONTROLLER.get_tooltip(layer_names, idx)
+                        jsc['#properties'].html = html
+
             # refresh the status if needed
             if (t - last_status_refresh_time) > 1:
                 for jsc in get_broadcast_jsclients('/'):
-                    print('REFRESH')
                     jsc['#datasources'].html = LAYER_CONTROLLER.get_datasource_status_messages()
                 last_status_refresh_time = time.time()
 

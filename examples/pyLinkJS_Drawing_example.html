@@ -14,12 +14,16 @@
   <canvas id="Canvas1" style="display:none; border: solid 1px black;" width="500" height="500"></canvas>
   <canvas id="Canvas2" style="border: solid 1px black; margin-left: 10px; margin-top:10px" width="500" height="500"></canvas>
   <div id="right_pane" style="position: absolute; top: 10px; left: 400px; padding: 4px 4px 4px 4px;">
-    <h2>Layers</h2>
-    <div id="layers"></div>
+    <h2>Options</h2>
+    <div id="options"></div>
 
     <h2>DataSources</h2>
     <div id="datasources"></div>
+    <h2>Properties</h2>
+    <div id="properties"></div>
   </div>
+
+  <div id="tooltip" style="visbility: hidden; position:absolute; top:40; left:40; background-color:palegoldenrod; border: solid 1px black; padding: 4px; width: fit-content; height: auto">Tooltip</div>
 
 <script>
   function resize() {

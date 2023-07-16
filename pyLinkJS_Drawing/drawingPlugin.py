@@ -374,7 +374,7 @@ class RenderObject():
         kwargs['glow'] = kwargs.get('glow', False)
         kwargs['glow_attenuation'] = kwargs.get('glow_attenuation', [0.33, 0.33, 0.33, 0.03])
         kwargs['glow_width'] = kwargs.get('glow_width', 40)
-        kwargs['clickable'] = kwargs.get('clickable', True)
+        kwargs['clickable'] = kwargs.get('clickable', False)
         kwargs['scale'] = kwargs.get('scale', 1)
         kwargs['strokeStyle'] = kwargs.get('strokeStyle', 'black')
         kwargs['visible'] = kwargs.get('visible', True)
@@ -399,14 +399,8 @@ class RenderObject():
                 if k[:-3] in self.props:
                     del self.props[k[:-3]]
 
-    def _point_in_obj_children(self, x, y, t):
-        # check the children of this renderobject for a point inside of them
-        #    return the first child render object which has a hit
-        for c in self.children.values():
-            ro_hit = c.point_in_obj(x, y, t)
-            if ro_hit is not None:
-                return ro_hit
-
+    def _point_in_obj(self, x, y, t):
+        """ custom code per render object to determine if hit is in the object """
         return None
 
     def add_child(self, childobj):
@@ -460,6 +454,20 @@ class RenderObject():
 
         # draw the hard border
         partial_func()
+
+    def point_in_obj(self, x, y, t):
+        # init
+        retval = []
+
+        # check if this point is in this object
+        if self._point_in_obj(x, y, t):
+            retval.append(self)
+
+        # search the children
+        for c in self.children.values():
+            retval = retval + c.point_in_obj(x, y, t)
+
+        return retval
 
     def prerender(self, f, t):
         """ save the context state and then set the default drawing properties for this render object """
@@ -579,15 +587,13 @@ class EllipseObject(RenderObject):
             f.ellipse(positions[0], positions[1], self.props['radiusX'] * self.props['scale'], self.props['radiusY'] * self.props['scale'],
                       self.props['rotation'], self.props['startAngle'], self.props['endAngle'], self.props['counterclockwise'])
 
-    def point_in_obj(self, x, y, t):
+    def _point_in_obj(self, x, y, t):
         if self.flightplan:
             positions = self.flightplan.get_positions(self, t)
             dx = (x - positions[0]) / (self.props['radiusX'] * self.props['scale'])
             dy = (y - positions[1]) / (self.props['radiusY'] * self.props['scale'])
             if (dx * dx + dy * dy - 1) <= 0:
                 return self
-
-        return self._point_in_obj_children(x, y, t)
 
 
 class CircleObject(EllipseObject):
@@ -621,15 +627,13 @@ class RoundRectObject(RenderObject):
             positions = self.flightplan.get_positions(self, t)
             f.roundRect(positions[0], positions[1], self.props['width'] * self.props['scale'], self.props['height'] * self.props['scale'], self.props['radii'])
 
-    def point_in_obj(self, x, y, t):
+    def _point_in_obj(self, x, y, t):
         if self.flightplan:
             positions = self.flightplan.get_positions(self, t)
             x = x - positions[0]
             y = y - positions[1]
             if (x >= 0) and (x < self.props['width'] * self.props['scale']) and (y >= 0) and (y < self.props['height'] * self.props['scale']):
                 return self
-
-        return self._point_in_obj_children(x, y, t)
 
 
 class ImageObject(RoundRectObject):
@@ -649,15 +653,13 @@ class ImageObject(RoundRectObject):
             if self.props['image_name'] is not None:
                 f.image(self.props['image_name'], positions[0], positions[1], self.props['width'], self.props['height'], filter_str=self.props['filter_str'])
 
-    def point_in_obj(self, x, y, t):
+    def _point_in_obj(self, x, y, t):
         if self.flightplan:
             positions = self.flightplan.get_positions(self, t)
             x = x - positions[0]
             y = y - positions[1]
             if (x >= 0) and (x < self.props['width'] * self.props['scale']) and (y >= 0) and (y < self.props['height'] * self.props['scale']):
                 return self
-
-        return self._point_in_obj_children(x, y, t)
 
 
 class RectObject(RoundRectObject):
@@ -687,7 +689,7 @@ class TextObject(RenderObject):
             f.text(text_str=self.props['text_str'], x=positions[0], y=positions[1], fillStyle=self.props['fillStyle'])
 
     def point_in_obj(self, x, y, t):
-        return self._point_in_obj_children(x, y, t)
+        return []
 
 
 # --------------------------------------------------
@@ -798,7 +800,7 @@ class pluginDrawing:
     def inject_javascript(self):
         # return the javascript to inject into every page
         return self._plugin_javascript
-    
+
     def register(self, kwargs):
         """ callback to register this plugin with the framework """
         # nothing to register for this plugin
