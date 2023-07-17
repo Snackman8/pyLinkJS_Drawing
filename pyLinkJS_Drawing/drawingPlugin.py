@@ -464,7 +464,7 @@ class RenderObject():
             retval.append(self)
 
         # search the children
-        for c in self.children.values():
+        for c in list(self.children.values()):
             retval = retval + c.point_in_obj(x, y, t)
 
         return retval
