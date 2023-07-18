@@ -55,7 +55,7 @@ function force_zoom(canvas_working_id, canvas_display_id, dx, dy, zoom){
     rerender();
 }
 
-function canvas_init(canvas_working_id, canvas_display_id) {
+function canvas_init(canvas_working_id, canvas_display_id, tooltip_id) {
     // calculate the contexts
     let cand = document.getElementById(canvas_display_id);
     let ctxd = cand.getContext("2d");
@@ -86,6 +86,19 @@ function canvas_init(canvas_working_id, canvas_display_id) {
 
     // Handle Mouse up to stop panning
     $('#' + canvas_display_id).mouseup(function(e) {
+        IS_DRAGGING = false;
+
+        let drect = cand.getBoundingClientRect();
+        let dx = e.pageX - drect.left;
+        let dy = e.pageY - drect.top;
+        let tm = ctxw.getTransform();
+        let wx = (dx - tm.e) / tm.a;
+        let wy = (dy - tm.f) / tm.d;
+        call_py_optional('onmouseup', wx, wy, e.button);
+    });
+
+    // Handle Mouse up to stop panning
+    $('#' + tooltip_id).mouseup(function(e) {
         IS_DRAGGING = false;
 
         let drect = cand.getBoundingClientRect();
