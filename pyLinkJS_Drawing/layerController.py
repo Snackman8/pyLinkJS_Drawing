@@ -90,9 +90,10 @@ class LayerRenderer():
             Args:
                 data_dict - dictionary of dataframes from data sources.
         """
-        raise NotImplemented()
+        # merge the data
+        self._data = self._data_dict_to_df(data_dict)
 
-    def render(self, parentObj):
+    def render(self, parentObj, options):
         """ update properties on data objects for rendering """
         raise NotImplemented()
 
@@ -217,7 +218,6 @@ class LayerController:
                 if opt['type'] == 'Boolean':
                     optval = jsc.eval_js_code(f"""$('#opt_{opt['id']}').is(":checked")""")
                     opts[opt['id']] = optval
-        print(opts)
         jsc.tag['options'] = opts
 
     def _thread_worker(self):

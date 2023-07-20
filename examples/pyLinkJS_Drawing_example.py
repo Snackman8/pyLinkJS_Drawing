@@ -113,9 +113,12 @@ class LR_Example_Circle(LayerRenderer):
     def get_tooltip(self, tooltip_idx):
         return 'Radius: ' + str(self._data.loc[tooltip_idx].circle_radius) + '<br>'
 
-    def on_data_changed(self, data_dict):
-        # merge the data
-        df = self._data_dict_to_df(data_dict)
+    def render(self, parentObj, options):
+        # make a copy of the data
+        df = self._data.copy()
+
+        df['circle_radius'] = 0
+        df['circle_fillStyle'] = 'rgba(0, 0, 0, 0)'
 
         if 'Value' in df.columns:
             df['Value'] = df['Value'].fillna(0)
@@ -129,15 +132,9 @@ class LR_Example_Circle(LayerRenderer):
             df.loc[~(df['Open'] == True), 'circle_radius'] = 2
             df.loc[~(df['Open'] == True), 'circle_fillStyle'] = 'rgba(192, 192, 192, 0.5)'
 
-        self._data = df
-
-    def render(self, parentObj, options):
-        if 'circle_radius' not in self._data.columns:
-            return
-
         visible = options['circle']
 
-        for idx, r in self._data.iterrows():
+        for idx, r in df.iterrows():
             if (circleObj := parentObj.children.get(f'CIRCLE_{idx}', None)) is not None:
                 circleObj.props['visible'] = visible
                 circleObj.props['radius'] = r['circle_radius']
@@ -161,12 +158,14 @@ class LR_Example_Text(LayerRenderer):
     def get_tooltip(self, tooltip_idx):
         return tooltip_idx + '<br>Value: ' + str(self._data.loc[tooltip_idx].Value) + '<br>TimeStamp: ' + str(self._data.loc[tooltip_idx].Value_ts) + '<br>'
 
-    def on_data_changed(self, data_dict):
-        # merge the data
-        df = self._data_dict_to_df(data_dict)
+    def render(self, parentObj, options):
+        # make a copy of the data
+        df = self._data.copy()
 
+        # set render properties
         df['text_fillStyle'] = 'black'
         df['text_font'] = '8pt Arial'
+        df['text_str'] = '?'
 
         if 'Value' in df.columns:
             df['Value'] = df['Value'].fillna(0)
@@ -180,27 +179,22 @@ class LR_Example_Text(LayerRenderer):
                     df.loc[idx, 'text_fillStyle'] = 'black'
                     df.loc[idx, 'text_font'] = '8pt Arial'
 
+                if options['always_red']:
+                    df.loc[idx, 'text_fillStyle'] = 'red'
+
         if 'Open' in df.columns:
             df['Open'] = df['Open'].fillna(False)
             df.loc[~(df['Open'] == True), 'text_str'] = ''
 
-        self._data = df
-
-    def render(self, parentObj, options):
-        if 'text_fillStyle' not in self._data.columns:
-            return
 
         visible = options['text']
 
-        for idx, r in self._data.iterrows():
+        for idx, r in df.iterrows():
             if (textObj := parentObj.children.get(f'TEXT_{idx}', None)) is not None:
                 textObj.props['visible'] = visible
                 textObj.props['text_str'] = r['text_str']
                 textObj.props['fillStyle'] = r['text_fillStyle']
                 textObj.props['font'] = r['text_font']
-
-                if options['always_red'] == True:
-                    textObj.props['fillStyle'] = 'red'
 
 
 # --------------------------------------------------
