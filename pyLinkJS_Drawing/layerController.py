@@ -408,71 +408,75 @@ class LayerApp:
         while True:
             t = time.time()
 
-            # refresh the data visually if needed
-            if (t - last_render_refresh_time) > 0.1:
-                for jsc in get_broadcast_jsclients('/'):
+            try:
+                # refresh the data visually if needed
+                if (t - last_render_refresh_time) > 0.1:
+                    for jsc in get_broadcast_jsclients('/'):
 
-                    # refresh the render objects associated with the data
-                    if 'ROOT_RENDER_OBJECT' in jsc.tag:
-                        image_obj = jsc.tag['ROOT_RENDER_OBJECT'].children['img']
-                        self.layer_controller.render(image_obj, jsc.tag.get('options', []))
+                        # refresh the render objects associated with the data
+                        if 'ROOT_RENDER_OBJECT' in jsc.tag:
+                            image_obj = jsc.tag['ROOT_RENDER_OBJECT'].children['img']
+                            self.layer_controller.render(image_obj, jsc.tag.get('options', []))
 
-                        f = JSDraw('ctx_drawing', 'ctx_display')
-                        f.fillStyle = 'white'
-                        f.clear()
-                        jsc.tag['ROOT_RENDER_OBJECT'].render(f, t)
-                        f.render(jsc)
-                last_render_refresh_time = time.time()
+                            f = JSDraw('ctx_drawing', 'ctx_display')
+                            f.fillStyle = 'white'
+                            f.clear()
+                            jsc.tag['ROOT_RENDER_OBJECT'].render(f, t)
+                            f.render(jsc)
+                    last_render_refresh_time = time.time()
 
 
-            if (t - last_tooltip_check_time) > 0.1:
-                for jsc in get_broadcast_jsclients('/'):
-                    if 'ROOT_RENDER_OBJECT' in jsc.tag:
-                        # check if we need to move the tool tip
-                        mlp = jsc.eval_js_code(f"""mouse_get_last_position();""")
-                        if mlp is not None:
-                            if mlp['elapsed_ms'] > 500:
-                                t = time.time()
-                                rolist = jsc.tag['ROOT_RENDER_OBJECT'].point_in_obj(mlp['wx'], mlp['wy'], t)
+                if (t - last_tooltip_check_time) > 0.1:
+                    for jsc in get_broadcast_jsclients('/'):
+                        if 'ROOT_RENDER_OBJECT' in jsc.tag:
+                            # check if we need to move the tool tip
+                            mlp = jsc.eval_js_code(f"""mouse_get_last_position();""")
+                            if mlp is not None:
+                                if mlp['elapsed_ms'] > 500:
+                                    t = time.time()
+                                    rolist = jsc.tag['ROOT_RENDER_OBJECT'].point_in_obj(mlp['wx'], mlp['wy'], t)
 
-                                # assemble a layer list
-                                tooltip_idx = None
-                                layer_names = set()
-                                for ro in rolist:
-                                    if 'layer_name' in ro.props:
-                                        layer_names.add(ro.props['layer_name'])
-                                        if 'idx' in ro.props:
-                                            tooltip_idx = ro.props['idx']
+                                    # assemble a layer list
+                                    tooltip_idx = None
+                                    layer_names = set()
+                                    for ro in rolist:
+                                        if 'layer_name' in ro.props:
+                                            layer_names.add(ro.props['layer_name'])
+                                            if 'idx' in ro.props:
+                                                tooltip_idx = ro.props['idx']
 
-                                html = self.layer_controller.get_tooltip(layer_names, tooltip_idx)
-                                if html != '':
-                                    jsc['#tooltip'].html = html
-                                    jsc['#tooltip'].css.left = mlp['px']
-                                    jsc['#tooltip'].css.top = mlp['py']
-                                    jsc['#tooltip'].css.visibility = 'visible'
-                                    jsc['body'].css.cursor = 'crosshair'
+                                    html = self.layer_controller.get_tooltip(layer_names, tooltip_idx)
+                                    if html != '':
+                                        jsc['#tooltip'].html = html
+                                        jsc['#tooltip'].css.left = mlp['px']
+                                        jsc['#tooltip'].css.top = mlp['py']
+                                        jsc['#tooltip'].css.visibility = 'visible'
+                                        jsc['body'].css.cursor = 'crosshair'
+                                    else:
+                                        jsc['#tooltip'].css.visibility = 'hidden'
+                                        jsc['body'].css.cursor = 'default'
                                 else:
                                     jsc['#tooltip'].css.visibility = 'hidden'
                                     jsc['body'].css.cursor = 'default'
-                            else:
-                                jsc['#tooltip'].css.visibility = 'hidden'
-                                jsc['body'].css.cursor = 'default'
-                last_tooltip_check_time = time.time()
+                    last_tooltip_check_time = time.time()
 
-            # refresh property window if needed
-            if (t - last_property_refresh_time) > 1:
-                for jsc in get_broadcast_jsclients('/'):
-                    if 'property_window' in jsc.tag:
-                        layer_names = jsc.tag['property_window']['layer_names']
-                        idx = jsc.tag['property_window']['idx']
-                        html = self.layer_controller.get_tooltip(layer_names, idx)
-                        jsc['#properties'].html = html
+                # refresh property window if needed
+                if (t - last_property_refresh_time) > 1:
+                    for jsc in get_broadcast_jsclients('/'):
+                        if 'property_window' in jsc.tag:
+                            layer_names = jsc.tag['property_window']['layer_names']
+                            idx = jsc.tag['property_window']['idx']
+                            html = self.layer_controller.get_tooltip(layer_names, idx)
+                            jsc['#properties'].html = html
 
-            # refresh the status if needed
-            if (t - last_status_refresh_time) > 1:
-                for jsc in get_broadcast_jsclients('/'):
-                    jsc['#datasources'].html = self.layer_controller.get_datasource_status_messages()
-                last_status_refresh_time = time.time()
+                # refresh the status if needed
+                if (t - last_status_refresh_time) > 1:
+                    for jsc in get_broadcast_jsclients('/'):
+                        jsc['#datasources'].html = self.layer_controller.get_datasource_status_messages()
+                    last_status_refresh_time = time.time()
 
-            # sleep 10ms
-            time.sleep(0.01)
+                # sleep 10ms
+                time.sleep(0.01)
+            except Exception as e:
+                print(e)
+                time.sleep(60)
