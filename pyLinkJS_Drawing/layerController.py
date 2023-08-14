@@ -70,7 +70,7 @@ class LayerRenderer():
         return df
 
     def get_options(self):
-        return []
+        return {}
 
     def get_tooltip(self, wx, wy, rolist):
         return ''
@@ -416,7 +416,7 @@ class LayerApp:
                         # refresh the render objects associated with the data
                         if 'ROOT_RENDER_OBJECT' in jsc.tag:
                             image_obj = jsc.tag['ROOT_RENDER_OBJECT'].children['img']
-                            self.layer_controller.render(image_obj, jsc.tag.get('options', []))
+                            self.layer_controller.render(image_obj, jsc.tag.get('options', {}))
 
                             f = JSDraw('ctx_drawing', 'ctx_display')
                             f.fillStyle = 'white'
