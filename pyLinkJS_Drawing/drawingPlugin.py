@@ -793,13 +793,13 @@ class pluginDrawing:
         self.jsc_exposed_funcs = {'drawing': lambda jsc : self._drawing}
 
         # cache the javascript for injection
-        f = open(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'pylinkjsDraw.js'), 'rb')
+        f = open(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'pylinkjsDraw.js'), 'r')
         self._plugin_javascript = f.read()
         f.close()
 
-    def inject_javascript(self):
+    def inject_html_top(self):
         # return the javascript to inject into every page
-        return self._plugin_javascript
+        return '<script>' + self._plugin_javascript + '</script>'
 
     def register(self, kwargs):
         """ callback to register this plugin with the framework """
