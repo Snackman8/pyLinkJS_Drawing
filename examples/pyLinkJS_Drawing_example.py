@@ -1,3 +1,9 @@
+"""Demo pyLinkJS_Drawing application with synthetic datasources and layered renderers.
+
+This example wires browser event callbacks to ``LayerApp``, simulates changing
+data inputs, and renders circle/text overlays on top of a background drawing.
+"""
+
 # --------------------------------------------------
 #    Imports
 # --------------------------------------------------
@@ -23,21 +29,68 @@ LAYER_APP = None
 #    Event Handlers
 # --------------------------------------------------
 def onmouseup(jsc, x, y, button):
-#    return LAYER_APP.on_mouseup(jsc, x, y, button, LAYER_CONTROLLER)
+    """Dispatch a mouse-up event to the active layer application.
+
+    Args:
+        jsc: Active pyLinkJS client.
+        x: World-space mouse x coordinate.
+        y: World-space mouse y coordinate.
+        button: Browser mouse button code.
+
+    Returns:
+        None.
+
+    Note:
+        - Delegates to ``LayerApp.on_mouseup`` for full behavior.
+    """
     return LAYER_APP.on_mouseup(jsc, x, y, button)
 
 
 def options_changed(jsc, *args):
+    """Dispatch browser option changes to the active layer application.
+
+    Args:
+        jsc: Active pyLinkJS client.
+        *args: Unused callback arguments.
+
+    Returns:
+        None.
+
+    Note:
+        - Delegates to ``LayerApp.on_options_changed``.
+    """
     return LAYER_APP.on_options_changed(jsc)
 
 
 def ready(jsc, *args):
-#    return LAYER_APP.on_ready(jsc, jsc.tag['background_file'], 'ctx_drawing', 'ctx_display', LAYER_CONTROLLER)
+    """Initialize demo state for a connected browser client.
+
+    Args:
+        jsc: Active pyLinkJS client.
+        *args: Unused callback arguments.
+
+    Returns:
+        None.
+
+    Note:
+        - Uses fixed context names ``ctx_drawing`` and ``ctx_display``.
+    """
     return LAYER_APP.on_ready(jsc, jsc.tag['background_file'], 'ctx_drawing', 'ctx_display')
 
 
 def reconnect(jsc, *args):
-    """ called when a webpage automatically reconnects a broken connection """
+    """Reinitialize demo state after client reconnect.
+
+    Args:
+        jsc: Active pyLinkJS client.
+        *args: Unused callback arguments.
+
+    Returns:
+        None.
+
+    Note:
+        - Calls ``ready`` to rebuild per-client state after reconnect.
+    """
     ready(jsc)
 
 
@@ -45,21 +98,40 @@ def reconnect(jsc, *args):
 #    Layer Implementation
 # --------------------------------------------------
 class LDS_Example_Values(LayerDataSource):
-#    FAKE_DATA = pd.DataFrame(columns=['Value', 'Value_ts', 'PrevValue', 'FirstSeen_ts'], index=[f'D-{i}' for i in range(1, 15)]).fillna(0)
-
+    """Example datasource that emits numeric value updates."""
     def __init__(self, cooldown_period=5):
-        """ init """
+        """Initialize the synthetic numeric-value datasource.
+
+        Args:
+            cooldown_period: Poll interval in seconds. Default is ``5``.
+
+        Returns:
+            None.
+
+        Note:
+            - See ``LayerDataSource.__init__`` for base datasource fields.
+            - Calls base constructor with fixed datasource name
+              ``'ExampleValues'``.
+        """
         super().__init__(name='ExampleValues', cooldown_period=cooldown_period)
 
     @classmethod
     def data_fetch(cls):
-        """ fake fetch data """
+        """Fetch synthetic numeric values for demo indices.
+
+        Returns:
+            Dataframe with value and timestamp columns.
+
+        Note:
+            - Implements ``LayerDataSource.data_fetch``.
+            - Reads/writes ``Values.csv`` for simple persisted demo state.
+        """
         time.sleep(1)
-        # hacky way to make fake persistent data
+        # Keep example state persistent across refreshes.
         try:
             df = pd.read_csv('Values.csv', index_col=0)
         except:
-            print('Error!')
+            logging.warning('Values.csv not found or unreadable; creating seed dataframe.')
             df = pd.DataFrame(columns=['Value', 'Value_ts', 'PrevValue', 'FirstSeen_ts'], index=[f'D-{i}' for i in range(1, 15)]).fillna(0)
 
         # save the previous values
@@ -84,13 +156,33 @@ class LDS_Example_Values(LayerDataSource):
 
 
 class LDS_Example_Open(LayerDataSource):
+    """Example datasource that emits open/closed boolean states."""
     def __init__(self, cooldown_period=5):
-        """ init """
+        """Initialize the synthetic open/closed-state datasource.
+
+        Args:
+            cooldown_period: Poll interval in seconds. Default is ``5``.
+
+        Returns:
+            None.
+
+        Note:
+            - See ``LayerDataSource.__init__`` for base datasource fields.
+            - Calls base constructor with fixed datasource name
+              ``'ExampleOpen'``.
+        """
         super().__init__(name='ExampleOpen', cooldown_period=cooldown_period)
 
     @classmethod
     def data_fetch(cls):
-        """ fake fetch data """
+        """Fetch synthetic open/closed states for demo indices.
+
+        Returns:
+            Dataframe with boolean open/closed state values.
+
+        Note:
+            - Implements ``LayerDataSource.data_fetch``.
+        """
         time.sleep(10)
         idx = []
         open_vals = []
@@ -102,18 +194,64 @@ class LDS_Example_Open(LayerDataSource):
 
 
 class LR_Example_Circle(LayerRenderer):
+    """Example renderer for circle render objects."""
+
     def layer_init(self, parentObj):
+        """Create circle render objects for each indexed demo point.
+
+        Args:
+            parentObj: Parent render object for circle children.
+
+        Returns:
+            None.
+
+        Note:
+            - Implements ``LayerRenderer.layer_init``. See base class docs for
+              lifecycle details.
+        """
         for idx, r in self._data.iterrows():
             circle_obj = CircleObject(name=f'CIRCLE_{idx}', x=r['x'], y=r['y'], radius=1, fillStyle='black', lineWidth=0.1, layer_name=self.name)
             parentObj.add_child(circle_obj)
 
     def get_options(self):
+        """Return UI options used by this renderer.
+
+        Returns:
+            List of option descriptor dictionaries.
+
+        Note:
+            - Implements ``LayerRenderer.get_options``.
+        """
         return [{'id': 'circle', 'text': 'Example Circle', 'type': 'Boolean', 'default_value': True}]
 
     def get_tooltip(self, tooltip_idx):
+        """Return tooltip HTML for a selected point.
+
+        Args:
+            tooltip_idx: Index of selected point.
+
+        Returns:
+            HTML fragment string.
+
+        Note:
+            - Implements ``LayerRenderer.get_tooltip``.
+        """
         return 'Radius: ' + str(self._data.loc[tooltip_idx].circle_radius) + '<br>'
 
     def render(self, parentObj, options):
+        """Update circle visibility and styling from datasource state.
+
+        Args:
+            parentObj: Parent render object containing circle children.
+            options: Runtime renderer options selected in UI.
+
+        Returns:
+            None.
+
+        Note:
+            - Implements ``LayerRenderer.render``. See base class docs for
+              invocation timing.
+        """
         # make a copy of the data
         df = self._data.copy()
 
@@ -142,7 +280,21 @@ class LR_Example_Circle(LayerRenderer):
 
 
 class LR_Example_Text(LayerRenderer):
+    """Example renderer for text render objects and click-hit regions."""
+
     def layer_init(self, parentObj):
+        """Create click-hit boxes and text render objects for each point.
+
+        Args:
+            parentObj: Parent render object for text-related children.
+
+        Returns:
+            None.
+
+        Note:
+            - Implements ``LayerRenderer.layer_init``. See base class docs for
+              lifecycle details.
+        """
         click_width = 15
         click_height = 12
         for idx, r in self._data.iterrows():
@@ -152,13 +304,45 @@ class LR_Example_Text(LayerRenderer):
             parentObj.add_child(text_obj)
 
     def get_options(self):
+        """Return UI options used by this renderer.
+
+        Returns:
+            List of option descriptor dictionaries.
+
+        Note:
+            - Implements ``LayerRenderer.get_options``.
+        """
         return [{'id': 'text', 'text': 'Example Text', 'type': 'Boolean', 'default_value': True},
                 {'id': 'always_red', 'text': 'Always Red', 'type': 'Boolean', 'default_value': False}]
 
     def get_tooltip(self, tooltip_idx):
+        """Return tooltip HTML for a selected point.
+
+        Args:
+            tooltip_idx: Index of selected point.
+
+        Returns:
+            HTML fragment string.
+
+        Note:
+            - Implements ``LayerRenderer.get_tooltip``.
+        """
         return tooltip_idx + '<br>Value: ' + str(self._data.loc[tooltip_idx].Value) + '<br>TimeStamp: ' + str(self._data.loc[tooltip_idx].Value_ts) + '<br>'
 
     def render(self, parentObj, options):
+        """Update text visibility/content/styling from datasource state.
+
+        Args:
+            parentObj: Parent render object containing text children.
+            options: Runtime renderer options selected in UI.
+
+        Returns:
+            None.
+
+        Note:
+            - Implements ``LayerRenderer.render``. See base class docs for
+              invocation timing.
+        """
         # make a copy of the data
         df = self._data.copy()
 
@@ -201,6 +385,17 @@ class LR_Example_Text(LayerRenderer):
 #    Main
 # --------------------------------------------------
 def main(args):
+    """Build demo layers and launch the pyLinkJS application.
+
+    Args:
+        args: Parsed CLI argument mapping.
+
+    Returns:
+        None.
+
+    Note:
+        - Builds two datasources and two renderers, then starts ``LayerApp``.
+    """
     # globals
     global LAYER_APP
 
@@ -234,7 +429,7 @@ if __name__ == '__main__':
     # parse command line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--background_file', help='file location of the background image', default='floor_plan.svg')
-    parser.add_argument('--data_coordinate_file', help='file location of the data coordiantes', default='data_coords.csv')
+    parser.add_argument('--data_coordinate_file', help='file location of the data coordinates', default='data_coords.csv')
     args = parser.parse_args()
     args = vars(args)
 

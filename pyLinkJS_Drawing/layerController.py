@@ -1,3 +1,10 @@
+"""Layer orchestration framework for pyLinkJS_Drawing.
+
+Defines base classes for datasources and renderers, coordinates periodic data
+fetch/update flow, and manages interactive layer app behavior (render refresh,
+tooltips, options, and datasource status updates) for pyLinkJS canvas clients.
+"""
+
 # --------------------------------------------------
 #    Imports
 # --------------------------------------------------
@@ -16,18 +23,28 @@ from pylinkjs.PyLinkJS import get_broadcast_jsclients
 #    Classes
 # --------------------------------------------------
 class LayerRenderer():
-    def __init__(self, name, starting_data_dict={}, subscribed_datasources=[]):
-        """ init for LayerRenderer
+    """Base class for renderers that map datasource state to render objects."""
+    def __init__(self, name, starting_data_dict=None, subscribed_datasources=None):
+        """Initialize a data-driven layer renderer.
 
-            Public Attributes:
-                name - unique name of this LayerRenderer
-                subscribed datasources - list of layer datasource names this renderer subscribes to
+        Args:
+            name: Required unique renderer name.
+            starting_data_dict: Initial source dataframe mapping. Defaults to
+                an empty mapping when ``None``.
+            subscribed_datasources: Datasource names consumed by this renderer.
+                Defaults to an empty list when ``None``.
 
-            Args:
-                name - unique name of this LayerRenderer
-                starting_data_dict - starting data for this renderer in order to perform layer init
-                subscribed datasources - list of layer datasource names this renderer subscribes to
+        Returns:
+            None.
+
+        Note:
+            - ``self.visible`` is initialized to ``True``.
         """
+        if starting_data_dict is None:
+            starting_data_dict = {}
+        if subscribed_datasources is None:
+            subscribed_datasources = []
+
         self._data = self._data_dict_to_df(starting_data_dict)
         self.name = name
         self.subscribed_datasources = list(subscribed_datasources)
@@ -35,13 +52,17 @@ class LayerRenderer():
 
     @classmethod
     def _data_dict_to_df(cls, data_dict):
-        """ convert a dictionary of dataframes into a giant dataframe
+        """Merge multiple source dataframes into a single dataframe.
 
-            Args:
-                data_dict - dictionary of dataframes
+        Args:
+            data_dict: Dictionary of dataframes keyed by datasource name.
 
-            Returns:
-                dataframe which is a union of all the dataframes in the dictionary
+        Returns:
+            Dataframe containing merged columns and aligned index values.
+
+        Note:
+            - ``data_dict`` is expected to include a ``data_coords`` key used
+              to constrain the final index set.
         """
         # init
         keys = list(data_dict.keys())
@@ -70,54 +91,90 @@ class LayerRenderer():
         return df
 
     def get_options(self):
+        """Return renderer-specific option descriptors.
+
+        Returns:
+            Iterable of option descriptor dictionaries.
+        """
         return {}
 
     def get_tooltip(self, wx, wy, rolist):
+        """Return tooltip HTML for a hit-test result set.
+
+        Args:
+            wx: World-space mouse x coordinate.
+            wy: World-space mouse y coordinate.
+            rolist: Render objects under cursor.
+
+        Returns:
+            HTML string for tooltip display.
+        """
         return ''
 
     def layer_init(self):
-        """ Initialize render objects
+        """Initialize render objects for this layer.
 
-            Args:
-                initial_data_coords - dataframe containing x, y coordinates for data objects
-                parentObj - object to create render objects on
+        Returns:
+            None.
+
+        Note:
+            - Subclasses must implement this method.
         """
         raise NotImplemented()
 
     def on_data_changed(self, data_dict):
-        """ Callback when subscribed data changes
+        """Handle updates from subscribed datasources.
 
-            Args:
-                data_dict - dictionary of dataframes from data sources.
+        Args:
+            data_dict: Dataframe mapping for subscribed datasources.
+
+        Returns:
+            None.
         """
         # merge the data
         self._data = self._data_dict_to_df(data_dict)
 
     def render(self, parentObj, options):
-        """ update properties on data objects for rendering """
+        """Update layer-owned render objects before frame draw.
+
+        Args:
+            parentObj: Parent render object this layer updates.
+            options: Runtime options map for conditional rendering.
+
+        Returns:
+            None.
+
+        Note:
+            - Subclasses must implement this method.
+        """
         raise NotImplemented()
 
 
 class LayerDataSource():
-    def __init__(self, name, cooldown_period=5, next_fire_time=datetime.datetime(1900, 1, 1), initial_data=pd.DataFrame()):
-        """ init for a LayerDatasource
+    """Base class for polling datasource providers used by layer renderers."""
+    def __init__(self, name, cooldown_period=5, next_fire_time=datetime.datetime(1900, 1, 1), initial_data=None):
+        """Initialize a polling datasource for one layer input stream.
 
-            Public Attributes:
-                cooldown_period - number of seconds to wait between the end of the previous data fetch and the next data fetch
-                data - dataframe containing the data from the last data fetch
-                data_last_fetch_time - the datetime of the last data fetch
-                name - unique name of this layer data source
-                next_fire_time - datetime of the earliest time this datasource can fetch data again
+        Args:
+            name: Required unique datasource name.
+            cooldown_period: Minimum seconds between completed fetches.
+                Default is ``5``.
+            next_fire_time: Earliest allowed fetch time. Default is
+                ``datetime.datetime(1900, 1, 1)`` to fire immediately on start.
+                Set ``None`` to disable polling.
+            initial_data: Initial dataframe value. Defaults to an empty
+                dataframe when ``None``.
 
+        Returns:
+            None.
 
-            Args:
-                name - name of the Layer Data Source
-                cooldown_period - number of seconds to cooldown between data requests, cooldown begins when the previous data
-                                  fetch returns
-                next_fire_time - initial first fire time for the data source.  Defaults to firing as soon as possible.
-                                 set to None to disable firing
-                initial_data - initial data
+        Note:
+            - ``self.data_last_fetch_time`` is initialized to ``None`` until
+              ``set_data`` is called.
         """
+        if initial_data is None:
+            initial_data = pd.DataFrame()
+
         self.cooldown_period = cooldown_period
         self.data = initial_data
         self.data_last_fetch_time = None
@@ -126,26 +183,47 @@ class LayerDataSource():
 
     @classmethod
     def data_fetch(cls):
-        """ Fetch data for this data source
+        """Fetch the latest dataframe for this datasource.
 
-            Returns:
-                dataframe
+        Returns:
+            Dataframe for this datasource.
+
+        Note:
+            - Subclasses must implement this method.
         """
         raise NotImplemented()
 
     def set_data(self, df, data_fetch_time=None):
-        """ set the data for this data source
+        """Set the most recent dataframe and fetch timestamp.
 
-            Args:
-                df - data to set
-                data_fetch_time - date and time of the last completed data fetch.  None to use now
+        Args:
+            df: Dataframe to store as current datasource data.
+            data_fetch_time: Completion timestamp for the fetch operation.
+                Uses ``datetime.datetime.now()`` when ``None``.
+
+        Returns:
+            None.
+
+        Note:
+            - This method updates both ``self.data`` and
+              ``self.data_last_fetch_time``.
         """
         self.data = df
         self.data_last_fetch_time = datetime.datetime.now() if data_fetch_time is None else data_fetch_time
 
 
 class LayerController:
+    """Coordinates datasource polling and renderer update callbacks."""
     def __init__(self, minimum_datasource_cooldown_period=5):
+        """Initialize datasource/renderer coordination state.
+
+        Args:
+            minimum_datasource_cooldown_period: Global floor for datasource
+                cooldown intervals in seconds. Default is ``5``.
+
+        Returns:
+            None.
+        """
         self._layer_datasources = {}
         self._layer_datarenderers = {}
         self.shutdown = False
@@ -153,14 +231,38 @@ class LayerController:
 
     @classmethod
     def _mp_wrapper(cls, func, args, kwargs, q):
+        """Run a callable and push its return value into a queue.
+
+        Args:
+            func: Callable to execute.
+            args: Positional arguments for ``func``.
+            kwargs: Keyword arguments for ``func``.
+            q: Queue-like object that supports ``put``.
+
+        Returns:
+            None.
+        """
         retval = func(*args, **kwargs)
         q.put(retval)
 
     def start(self):
+        """Start the datasource polling worker thread.
+
+        Returns:
+            None.
+        """
         t = threading.Thread(target=self._thread_worker, args=())
         t.start()
 
     def _status_message_for_datasource(self, ds):
+        """Build HTML status text for one datasource.
+
+        Args:
+            ds: ``LayerDataSource`` instance to summarize.
+
+        Returns:
+            HTML snippet containing datasource name and recency text.
+        """
         html = f'<h4>{ds.name}</h4>'
         if ds.data_last_fetch_time:
             delta = (datetime.datetime.now() - ds.data_last_fetch_time).seconds
@@ -172,6 +274,14 @@ class LayerController:
         return html
 
     def build_options_html(self, jsc):
+        """Build options-panel HTML from all registered renderers.
+
+        Args:
+            jsc: Active pyLinkJS client.
+
+        Returns:
+            HTML string with option controls.
+        """
         html = ''
         opts = {}
         for dr in self._layer_datarenderers.values():
@@ -186,6 +296,11 @@ class LayerController:
         return html
 
     def get_datasource_status_messages(self):
+        """Return concatenated datasource status HTML.
+
+        Returns:
+            HTML string for datasource status panel.
+        """
         keys = list(self._layer_datasources.keys())
         status_html = ''
         for k in keys:
@@ -193,6 +308,15 @@ class LayerController:
         return status_html
 
     def get_tooltip(self, layer_names, tooltip_idx):
+        """Collect tooltip HTML from matching renderers.
+
+        Args:
+            layer_names: Iterable of renderer names to query.
+            tooltip_idx: Data index used by renderer tooltip handlers.
+
+        Returns:
+            HTML string combining renderer tooltip fragments.
+        """
         html = ''
         for name in layer_names:
             if name in self._layer_datarenderers:
@@ -203,6 +327,15 @@ class LayerController:
         return html
 
     def render(self, parentObj, options):
+        """Run ``render`` on each registered layer renderer.
+
+        Args:
+            parentObj: Parent render object passed to renderers.
+            options: Runtime options map.
+
+        Returns:
+            None.
+        """
         # notify renderers that data source has been updated
         for dr in self._layer_datarenderers.values():
             try:
@@ -211,6 +344,14 @@ class LayerController:
                 logging.error(traceback.format_exc())
 
     def update_options(self, jsc):
+        """Read option control state from browser and store in ``jsc.tag``.
+
+        Args:
+            jsc: Active pyLinkJS client.
+
+        Returns:
+            None.
+        """
         # read back all of the options
         opts = {}
         for dr in self._layer_datarenderers.values():
@@ -221,7 +362,15 @@ class LayerController:
         jsc.tag['options'] = opts
 
     def _thread_worker(self):
-        """ thread worker, coordinate data fetches """
+        """Run the datasource polling loop and fan out updates to renderers.
+
+        Returns:
+            None.
+
+        Note:
+            - Uses ``ProcessPoolExecutor`` with one worker per registered
+              datasource.
+        """
 
         # setup the process pool executor
         futures = {}
@@ -280,7 +429,21 @@ class LayerController:
 
 
 class LayerApp:
+    """High-level app wrapper for interactive layered drawing views."""
     def __init__(self, data_sources, renderers):
+        """Initialize the layer app and register datasources/renderers.
+
+        Args:
+            data_sources: Iterable of ``LayerDataSource`` instances.
+            renderers: Iterable of ``LayerRenderer`` instances.
+
+        Returns:
+            None.
+
+        Note:
+            - Creates a ``LayerController`` with minimum cooldown ``3`` and
+              starts controller polling immediately.
+        """
         self.layer_controller = LayerController(minimum_datasource_cooldown_period=3)
 
         for lds in data_sources:
@@ -293,6 +456,15 @@ class LayerApp:
 
     @classmethod
     def compute_image_scale(cls, w, h):
+        """Scale image dimensions to fit a 2000-unit max side.
+
+        Args:
+            w: Original image width.
+            h: Original image height.
+
+        Returns:
+            Tuple ``(scaled_width, scaled_height)``.
+        """
         if w < h:
             scale = 2000.0 / h
         else:
@@ -302,6 +474,17 @@ class LayerApp:
 
     @classmethod
     def compute_zoom(cls, canvas_width, canvas_height, image_width, image_height):
+        """Compute zoom factor that fits image inside canvas bounds.
+
+        Args:
+            canvas_width: Canvas width in pixels.
+            canvas_height: Canvas height in pixels.
+            image_width: Image width in world units.
+            image_height: Image height in world units.
+
+        Returns:
+            Scalar zoom factor.
+        """
         c_ar = canvas_width / canvas_height
         i_ar = image_width / image_height
 
@@ -313,13 +496,22 @@ class LayerApp:
             return canvas_height / image_height
 
     def on_mouseup(self, jsc, x, y, button):
-        """ print out the click coordinate """
-#        global DATA_CLICK_INDEX
+        """Handle mouse-up events and refresh property panel selection.
 
+        Args:
+            jsc: Active pyLinkJS client.
+            x: World-space mouse x coordinate.
+            y: World-space mouse y coordinate.
+            button: Mouse button value from browser event.
+
+        Returns:
+            None.
+
+        Note:
+            - Only left-click events (``button == 0``) update the property
+              panel state.
+        """
         if (button == 0):
-#            print(f'{DATA_CLICK_PREFIX}-{DATA_CLICK_INDEX},{int(x)},{int(y)}')
-#            DATA_CLICK_INDEX = DATA_CLICK_INDEX + 1
-
             if 'ROOT_RENDER_OBJECT' in jsc.tag:
                 # check if we need to move the tool tip
                 mlp = jsc.eval_js_code(f"""mouse_get_last_position();""")
@@ -342,9 +534,28 @@ class LayerApp:
                     jsc['#properties'].html = html
 
     def on_options_changed(self, jsc):
+        """Handle options panel changes for one client.
+
+        Args:
+            jsc: Active pyLinkJS client.
+
+        Returns:
+            None.
+        """
         self.layer_controller.update_options(jsc)
 
     def on_ready(self, jsc, background_image_path, drawing_context_name, display_context_name):
+        """Initialize canvas scene, layers, options, and first render.
+
+        Args:
+            jsc: Active pyLinkJS client.
+            background_image_path: Background image URL/path.
+            drawing_context_name: Off-screen canvas context variable name.
+            display_context_name: On-screen canvas context variable name.
+
+        Returns:
+            None.
+        """
         # create the render objects list
         f = jsc.drawing()
         f.create_image('img_floor_plan', background_image_path)
@@ -366,7 +577,7 @@ class LayerApp:
         # attempt to scale the image up to a normalized coordinate system of 2000 x 2000
         img_width, img_height = LayerApp.compute_image_scale(img_width, img_height)
 
-        # calcualte zoom
+        # calculate zoom
         zoom = LayerApp.compute_zoom(canvas_width, canvas_height, img_width, img_height)
 
         # set the initial zoom to fit the image
@@ -393,11 +604,21 @@ class LayerApp:
         f.render(jsc)
 
     def start(self):
+        """Start the UI refresh worker thread.
+
+        Returns:
+            None.
+        """
         # start the thread
         t = threading.Thread(target=self.thread_worker, daemon=True)
         t.start()
 
     def thread_worker(self):
+        """Run periodic rendering, tooltip, property, and status refresh loops.
+
+        Returns:
+            None.
+        """
         # init
         last_render_refresh_time = 0
         last_status_refresh_time = 0
@@ -478,5 +699,5 @@ class LayerApp:
                 # sleep 10ms
                 time.sleep(0.01)
             except Exception as e:
-                print(e)
+                logging.error(e)
                 time.sleep(60)

@@ -1,17 +1,24 @@
+<!--
+  Demo HTML template for pyLinkJS_Drawing.
+  Defines the canvases and side-panel containers used by the Python example app.
+-->
 <head>
-    <!-- jquery (requires for pyLinkJS) -->
+    <!-- Example HTML shell for the pyLinkJS_Drawing demo application. -->
+    <!-- jQuery is required by pyLinkJS and this example's DOM helpers. -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.1/dist/jquery.min.js"></script>
 
-    <!-- bootstrap (requires for pyLinkJS UI Helpers) -->
+    <!-- Bootstrap is used for pyLinkJS UI helper styling. -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.1/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.1/dist/js/bootstrap.bundle.min.js"></script>
 </head>
 
 <body>
+  <!-- Hidden working canvas + visible display canvas (double-buffer rendering). -->
   <h1>Demo App</h1>
   <canvas id="Canvas_Drawing" style="display:none; border: solid 1px black;"></canvas>
   <canvas id="Canvas_Display" style="border: solid 1px black; margin-left: 10px; margin-top:10px"></canvas>
 
+  <!-- Right-side control/status panel populated by Python callbacks. -->
   <div id="right_pane" style="position: absolute; top: 10px; left: 400px; padding: 4px 4px 4px 4px;">
     <h2>Options</h2>
     <div id="options"></div>
@@ -22,11 +29,21 @@
     <div id="properties"></div>
   </div>
 
-  <div id="tooltip" style="visbility: hidden; position:absolute; top:40; left:40; background-color:palegoldenrod; border: solid 1px black; padding: 4px; width: fit-content; height: auto">Tooltip</div>
+  <!-- Tooltip content and position are updated dynamically by LayerApp logic. -->
+  <div id="tooltip" style="visibility: hidden; position:absolute; top:40; left:40; background-color:palegoldenrod; border: solid 1px black; padding: 4px; width: fit-content; height: auto">Tooltip</div>
 
 <script>
+  // Shared globals used by pylinkjsDraw.js and this page.
+  let width = 0;
+  let height = 0;
+  let canvas_drawing = null;
+  let ctx_drawing = null;
+  let canvas_display = null;
+  let ctx_display = null;
+
+  // Resize canvases and side panel to fit current viewport.
   function resize() {
-    /** resize handler **/
+    // Width reserves right-panel space; height reserves header/margin space.
     width = window.innerWidth - 20 - 200;
     height = window.innerHeight - 100;
     canvas_drawing.width = width;
@@ -40,25 +57,22 @@
     $('#right_pane').css('height', height);
   }
 
+  $(document).ready(function() {
+    // Register pan/zoom/mouse handlers from pylinkjsDraw.js.
+    canvas_init('Canvas_Drawing', 'Canvas_Display', 'tooltip');
 
-$( document ).ready(function() {
-  // initialize the canvas
-  canvas_init('Canvas_Drawing', 'Canvas_Display', 'tooltip');
+    // Store canvas/context references in globals used by drawing helpers.
+    canvas_drawing = document.getElementById('Canvas_Drawing');
+    ctx_drawing = canvas_drawing.getContext("2d");
+    canvas_display = document.getElementById('Canvas_Display');
+    ctx_display = canvas_display.getContext("2d");
 
-  // store the canvas and contexts in global variables
-  canvas_drawing = document.getElementById('Canvas_Drawing');
-  ctx_drawing = canvas_drawing.getContext("2d");
-  canvas_display = document.getElementById('Canvas_Display');
-  ctx_display = canvas_display.getContext("2d");
+    // Run initial layout sizing.
+    resize();
 
-  // force an initial resize on window load
-  resize();
-
-  // install a resize handler whenever the window is resized
-  $(window).on("resize", function() { resize(); });
-});
+    // Keep layout responsive on viewport changes.
+    $(window).on("resize", function() { resize(); });
+  });
 
 </script>
-
-
 </body>

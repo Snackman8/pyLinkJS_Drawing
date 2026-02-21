@@ -1,4 +1,5 @@
 /*jshint esversion: 6 */
+// Injected into pyLinkJS pages by pyLinkJS_Drawing.pluginDrawing.inject_html_top().
 
 // --------------------------------------------------
 //  Globals
@@ -15,39 +16,56 @@ var LAST_MOUSE_TIME = 0;
 
 
 // --------------------------------------------------
-//  Pan and Zoom Functions
+//  Pan/Zoom Helpers
 // --------------------------------------------------
+/**
+ * Force world translation to a specific offset.
+ *
+ * @param {string} canvas_working_id
+ * @param {string} canvas_display_id
+ * @param {number} x
+ * @param {number} y
+ */
 function force_translate(canvas_working_id, canvas_display_id, x, y){
-    // calculate the contexts
+    // Resolve canvas contexts.
     let cand = document.getElementById(canvas_display_id);
     let ctxd = cand.getContext("2d");
     let canw = document.getElementById(canvas_working_id);
     let ctxw = canw.getContext("2d");
     let tm = ctxw.getTransform();
 
-    // reset the translation so the world is back at 0, 0
+    // Reset translation so world origin is at (0, 0), then apply offset.
     ctxw.transform(1, 0, 0, 1, -tm.e / tm.a, -tm.f / tm.d);
     ctxw.transform(1, 0, 0, 1, x, y);
 }
 
+/**
+ * Force zoom around a display-space anchor point.
+ *
+ * @param {string} canvas_working_id
+ * @param {string} canvas_display_id
+ * @param {number} dx Display-space x coordinate.
+ * @param {number} dy Display-space y coordinate.
+ * @param {number} zoom Zoom multiplier.
+ */
 function force_zoom(canvas_working_id, canvas_display_id, dx, dy, zoom){
-    // calculate the contexts
+    // Resolve canvas contexts.
     let cand = document.getElementById(canvas_display_id);
     let ctxd = cand.getContext("2d");
     let canw = document.getElementById(canvas_working_id);
     let ctxw = canw.getContext("2d");
 
-    // find the coordinates the mouse is in in the working window
+    // Convert display-space anchor to world-space coordinates.
     let drect = cand.getBoundingClientRect();
     let tm = ctxw.getTransform();
     let wx = (dx - tm.e) / tm.a;
     let wy = (dy - tm.f) / tm.d;
 
-    // reset translation so the world is back at 0, 0 then set the new zoom
+    // Reset translation, apply new zoom, then restore anchor alignment.
     ctxw.transform(1, 0, 0, 1, -tm.e / tm.a, -tm.f / tm.d);
     ctxw.transform(zoom, 0, 0, zoom, 0, 0);
 
-    // read the new transform matrix
+    // Read new transform and compute anchor-preserving offset.
     let tm2 = ctxw.getTransform();
     let offsetx = dx / tm2.a;
     let offsety = dy / tm2.d;
@@ -55,36 +73,43 @@ function force_zoom(canvas_working_id, canvas_display_id, dx, dy, zoom){
     rerender();
 }
 
+/**
+ * Attach pan/zoom/mouse event handlers to the display canvas.
+ *
+ * @param {string} canvas_working_id
+ * @param {string} canvas_display_id
+ * @param {string} tooltip_id
+ */
 function canvas_init(canvas_working_id, canvas_display_id, tooltip_id) {
-    // calculate the contexts
+    // Resolve canvas contexts.
     let cand = document.getElementById(canvas_display_id);
     let ctxd = cand.getContext("2d");
     let canw = document.getElementById(canvas_working_id);
     let ctxw = canw.getContext("2d");
 
-    // Handle mouse down to start panning
+    // Start panning on mouse down.
     $('#' + canvas_display_id).mousedown(function(e) {
-        // update the drag coordinates
+        // Cache drag start coordinates.
         IS_DRAGGING = true;
         DRAG_START_COORD_X = e.pageX;
         DRAG_START_COORD_Y = e.pageY;
     });
 
-    // Handle mouse move for panning
+    // Pan while dragging.
     $('#' + canvas_display_id).mousemove(function(e) {
         if (IS_DRAGGING) {
-            // scale the panning so it matches mouse movement
+            // Scale panning by current zoom so visual drag speed is consistent.
             let tm = ctxw.getTransform();
             ctxw.transform(1, 0, 0, 1, (e.pageX - DRAG_START_COORD_X) / tm.a, (e.pageY - DRAG_START_COORD_Y) / tm.d);
             rerender();
 
-            // update the drag coordinates
+            // Update drag origin.
             DRAG_START_COORD_X = e.pageX;
             DRAG_START_COORD_Y = e.pageY;
         }
     });
 
-    // Handle Mouse up to stop panning
+    // Stop panning and emit optional mouse-up callback.
     $('#' + canvas_display_id).mouseup(function(e) {
         IS_DRAGGING = false;
 
@@ -97,7 +122,7 @@ function canvas_init(canvas_working_id, canvas_display_id, tooltip_id) {
         call_py_optional('onmouseup', wx, wy, e.button);
     });
 
-    // Handle Mouse up to stop panning
+    // Also forward mouse-up events from the tooltip element.
     $('#' + tooltip_id).mouseup(function(e) {
         IS_DRAGGING = false;
 
@@ -110,7 +135,7 @@ function canvas_init(canvas_working_id, canvas_display_id, tooltip_id) {
         call_py_optional('onmouseup', wx, wy, e.button);
     });
 
-    // Handle Mouse Move for tool tips
+    // Cache latest pointer position for server-side tooltip checks.
     $('#' + canvas_display_id).mousemove(function(e) {
         let drect = cand.getBoundingClientRect();
         let dx = e.pageX - drect.left;
@@ -126,7 +151,7 @@ function canvas_init(canvas_working_id, canvas_display_id, tooltip_id) {
         LAST_MOUSE_TIME = d.getTime();
     });
 
-    // Handle mouse wheel for zooming
+    // Zoom around cursor on wheel input.
     $('#' + canvas_display_id).bind('mousewheel', function(e) {
         let drect = cand.getBoundingClientRect();
         let dx = e.pageX - drect.left;
@@ -139,13 +164,21 @@ function canvas_init(canvas_working_id, canvas_display_id, tooltip_id) {
 
 
 // --------------------------------------------------
-//  Drawing Functions
+//  Drawing Primitives
 // --------------------------------------------------
+/**
+ * Clear the visible world-space area based on current transform.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ */
 function clear(ctx) {
     var t = ctx.getTransform();
     ctx.fillRect(-t.e / t.a, -t.f / t.d, ctx.canvas.width / t.a, ctx.canvas.height / t.d);
 }
 
+/**
+ * Draw an ellipse centered at (x, y).
+ */
 function draw_ellipse(ctx, x, y, radiusX, radiusY, rotation, startAngle, endAngle, counterclockwise) {
     ctx.save();
     ctx.transform(1, 0, 0, 1, x, y);
@@ -156,11 +189,17 @@ function draw_ellipse(ctx, x, y, radiusX, radiusY, rotation, startAngle, endAngl
     ctx.restore();
 }
 
+/**
+ * Draw an image with an optional CSS filter string.
+ */
 function draw_image(ctx, img, x, y, w, h, filter) {
     ctx.filter = filter;
     ctx.drawImage(img, x, y, w, h);
 }
 
+/**
+ * Draw a line segment from (x1, y1) to (x2, y2).
+ */
 function draw_line(ctx, x1, y1, x2, y2) {
     ctx.beginPath();
     ctx.moveTo(x1, y1);
@@ -168,6 +207,9 @@ function draw_line(ctx, x1, y1, x2, y2) {
     ctx.stroke();
 }
 
+/**
+ * Draw a rounded rectangle with corner radii.
+ */
 function draw_roundRect(ctx, x, y, width, height, radii) {
     ctx.save();
     ctx.transform(1, 0, 0, 1, x, y);
@@ -178,6 +220,9 @@ function draw_roundRect(ctx, x, y, width, height, radii) {
     ctx.restore();
 }
 
+/**
+ * Draw text anchored at (x, y).
+ */
 function draw_text(ctx, x, y, text) {
     ctx.save();
     ctx.transform(1, 0, 0, 1, x, y);
@@ -187,23 +232,39 @@ function draw_text(ctx, x, y, text) {
     ctx.restore();
 }
 
+/**
+ * Copy working canvas content to display canvas.
+ */
 function flip(ctx, ctx_target) {
     ctx_target.drawImage(ctx, 0, 0);
 }
 
+/**
+ * Cache render code and trigger immediate draw.
+ *
+ * @param {string} code JavaScript render body to evaluate.
+ */
 function render(code) {
     RENDER_CODE = code;
     rerender();
 }
 
+/**
+ * Re-render using cached JavaScript draw code.
+ */
 function rerender() {
     eval(RENDER_CODE);
 }
 
 
 // --------------------------------------------------
-//  Mouse Query
+//  Mouse State Query
 // --------------------------------------------------
+/**
+ * Return last known pointer position in world/display coordinates.
+ *
+ * @returns {Object} Object with keys: wx, wy, px, py, elapsed_ms.
+ */
 function mouse_get_last_position() {
     var d = new Date();
     var elapsed_ms = d.getTime() - LAST_MOUSE_TIME;
