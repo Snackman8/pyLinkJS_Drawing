@@ -98,7 +98,8 @@ Starting from this empty folder:
 4) The app should display circles with numbers that update over time (random values are fine).
 5) Include required pyLinkJS event handlers (ready, reconnect, onmouseup, options_changed).
 6) Keep the code simple and well-commented.
-7) At the end, print exact run commands.
+7) When the app starts, print the exact browser URL to open in the terminal, e.g. `Open http://localhost:8300 in your browser.`
+8) At the end, print exact run commands.
 
 Do not ask me follow-up questions unless something is truly blocking.
 ```
@@ -578,6 +579,7 @@ class LR_Circles(LayerRenderer):
 
 def main():
     global LAYER_APP
+    port = 8300
 
     coords = pd.DataFrame(
         {
@@ -599,7 +601,8 @@ def main():
     LAYER_APP.start()
 
     drawing_plugin = pluginDrawing("ctx_drawing", "ctx_display")
-    run_pylinkjs_app(default_html="mini_demo.html", plugins=[drawing_plugin], extra_settings={})
+    print(f"Open http://localhost:{port} in your browser.")
+    run_pylinkjs_app(default_html="mini_demo.html", plugins=[drawing_plugin], extra_settings={}, port=port)
 
 
 if __name__ == "__main__":
@@ -672,5 +675,6 @@ Before returning generated code, ensure:
 6. At least one datasource subclass implements `data_fetch`.
 7. At least one renderer subclass implements `layer_init` and `render`.
 8. `LayerApp` is built with datasources + renderers and `.start()` is called.
-9. `run_pylinkjs_app(...)` is called with the plugin.
-10. No Tornado template markers (`{{`, `}}`, `{%`, `%}`) are inserted into injected JS comments/strings.
+9. Startup prints the exact URL to open (for example, `Open http://localhost:8300 in your browser.`).
+10. `run_pylinkjs_app(...)` is called with the plugin (and matching `port`).
+11. No Tornado template markers (`{{`, `}}`, `{%`, `%}`) are inserted into injected JS comments/strings.
