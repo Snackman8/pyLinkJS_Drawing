@@ -80,26 +80,30 @@ Open:
 If you start from an empty folder and want Codex to scaffold a working demo:
 
 1. Open an empty folder in VS Code.
-2. Create a file named `pylinkJS_Drawing_codex_instructions.txt`.
-3. Copy the full contents of this `README.md` into
-   `pylinkJS_Drawing_codex_instructions.txt`.
-4. Open Codex in VS Code.
-5. Paste the prompt below.
+2. Open Codex in VS Code.
+3. Paste the prompt below.
 
 Prompt to use with Codex:
 
 ```text
-Read pylinkJS_Drawing_codex_instructions.txt in this workspace and follow it as the project spec.
+First, download this project's README from GitHub into this empty folder as `pyLinkJS_Drawing_readme.md`:
+- URL: https://raw.githubusercontent.com/Snackman8/pyLinkJS_Drawing/main/README.md
+- Prefer: `curl -fL "https://raw.githubusercontent.com/Snackman8/pyLinkJS_Drawing/main/README.md" -o pyLinkJS_Drawing_readme.md`
+- Fallback: `wget -O pyLinkJS_Drawing_readme.md "https://raw.githubusercontent.com/Snackman8/pyLinkJS_Drawing/main/README.md"`
+
+Then read `pyLinkJS_Drawing_readme.md` in this workspace and follow it as the project spec.
+Match the generated app to the "Minimal End-to-End Example (No CSV)" contract in that file (same structure, naming, handlers, and default behavior).
 
 Starting from this empty folder:
 1) Create a Python virtual environment named .venv if it does not already exist.
 2) Activate/use .venv and install prerequisites needed for pyLinkJS + pyLinkJS_Drawing demos.
-3) Create a minimal runnable app (Python + HTML) that uses pyLinkJS_Drawing.
+3) Create `mini_demo.py` and `mini_demo.html` using pyLinkJS_Drawing, aligned with the full example contract in `pyLinkJS_Drawing_readme.md`.
 4) The app should display circles with numbers that update over time (random values are fine).
 5) Include required pyLinkJS event handlers (ready, reconnect, onmouseup, options_changed).
-6) Keep the code simple and well-commented.
-7) When the app starts, print the exact browser URL to open in the terminal, e.g. `Open http://localhost:8300 in your browser.`
-8) At the end, print exact run commands.
+6) Set the initial background to a visible placeholder image that displays exactly: "You can ask the AI to change the background to a picture".
+7) Keep the code simple and well-commented.
+8) When the app starts, print the exact browser URL to open in the terminal, e.g. `Open http://localhost:8300 in your browser.`
+9) At the end, print exact run commands.
 
 Do not ask me follow-up questions unless something is truly blocking.
 ```
@@ -275,6 +279,12 @@ drawing_plugin = pluginDrawing('ctx_drawing', 'ctx_display')
 run_pylinkjs_app(default_html='your_page.html', plugins=[drawing_plugin], extra_settings={...})
 ```
 
+Python and HTML names must match exactly:
+
+- `pluginDrawing('ctx_drawing', 'ctx_display')`
+- `LAYER_APP.on_ready(jsc, background_image_path, 'ctx_drawing', 'ctx_display')`
+- HTML global variables named `ctx_drawing` and `ctx_display`
+
 ### Required Event Handlers
 
 - `ready(jsc, *args)` -> call `LAYER_APP.on_ready(jsc, background_image_path, 'ctx_drawing', 'ctx_display')`
@@ -294,6 +304,27 @@ The page must include:
 - property panel container: `id="properties"`
 
 `pylinkjsDraw.js` functions are injected by the plugin (`canvas_init`, `force_zoom`, `force_translate`, `mouse_get_last_position`, etc.).
+
+The page must also define these JavaScript globals (use `var`, not `let`):
+
+```html
+<script>
+  var canvas_drawing = null;
+  var ctx_drawing = null;
+  var canvas_display = null;
+  var ctx_display = null;
+
+  $(document).ready(function () {
+    canvas_drawing = document.getElementById('Canvas_Drawing');
+    ctx_drawing = canvas_drawing.getContext('2d');
+    canvas_display = document.getElementById('Canvas_Display');
+    ctx_display = canvas_display.getContext('2d');
+  });
+</script>
+```
+
+If these globals are missing or renamed, `on_ready` can receive `None` for width/height and fail with errors like:
+`TypeError: '<' not supported between instances of 'NoneType' and 'NoneType'`.
 
 ### LayerDataSource Contract
 
@@ -487,8 +518,9 @@ from pylinkjs.PyLinkJS import run_pylinkjs_app
 from pyLinkJS_Drawing.drawingPlugin import pluginDrawing, CircleObject, TextObject
 from pyLinkJS_Drawing.layerController import LayerDataSource, LayerRenderer, LayerApp
 
-# 1x1 transparent PNG data URI (used as background image source)
-BLANK_BG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9s2m2jQAAAAASUVORK5CYII="
+# Initial background image should be visible and display exactly:
+# "You can ask the AI to change the background to a picture"
+BLANK_BG = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScxMjAwJyBoZWlnaHQ9JzgwMCc+PHJlY3Qgd2lkdGg9JzEwMCUnIGhlaWdodD0nMTAwJScgZmlsbD0nd2hpdGUnLz48dGV4dCB4PSc1MCUnIHk9JzUwJScgdGV4dC1hbmNob3I9J21pZGRsZScgZG9taW5hbnQtYmFzZWxpbmU9J21pZGRsZScgZm9udC1mYW1pbHk9J0FyaWFsLCBzYW5zLXNlcmlmJyBmb250LXNpemU9JzM0JyBmaWxsPScjNjY2Jz5Zb3UgY2FuIGFzayB0aGUgQUkgdG8gY2hhbmdlIHRoZSBiYWNrZ3JvdW5kIHRvIGEgcGljdHVyZTwvdGV4dD48L3N2Zz4="
 
 LAYER_APP = None
 
@@ -634,10 +666,10 @@ if __name__ == "__main__":
   <div id="tooltip" style="visibility:hidden; position:absolute; background:palegoldenrod; border:1px solid black; padding:4px;">Tooltip</div>
 
   <script>
-    let canvas_drawing = null;
-    let ctx_drawing = null;
-    let canvas_display = null;
-    let ctx_display = null;
+    var canvas_drawing = null;
+    var ctx_drawing = null;
+    var canvas_display = null;
+    var ctx_display = null;
 
     function resize() {
       const w = window.innerWidth - 260;
@@ -672,9 +704,12 @@ Before returning generated code, ensure:
 3. `ready`, `reconnect`, `onmouseup`, and `options_changed` handlers exist.
 4. Plugin is created with `('ctx_drawing', 'ctx_display')`.
 5. HTML contains all required IDs.
-6. At least one datasource subclass implements `data_fetch`.
-7. At least one renderer subclass implements `layer_init` and `render`.
-8. `LayerApp` is built with datasources + renderers and `.start()` is called.
-9. Startup prints the exact URL to open (for example, `Open http://localhost:8300 in your browser.`).
-10. `run_pylinkjs_app(...)` is called with the plugin (and matching `port`).
-11. No Tornado template markers (`{{`, `}}`, `{%`, `%}`) are inserted into injected JS comments/strings.
+6. HTML defines global `var` context variables named exactly `canvas_drawing`, `ctx_drawing`, `canvas_display`, `ctx_display`.
+7. At least one datasource subclass implements `data_fetch`.
+8. At least one renderer subclass implements `layer_init` and `render`.
+9. `LayerApp` is built with datasources + renderers and `.start()` is called.
+10. Startup prints the exact URL to open (for example, `Open http://localhost:8300 in your browser.`).
+11. `run_pylinkjs_app(...)` is called with the plugin (and matching `port`).
+12. No Tornado template markers (`{{`, `}}`, `{%`, `%}`) are inserted into injected JS comments/strings.
+13. The initial background is not blank and visibly displays exactly: `You can ask the AI to change the background to a picture`.
+14. Generated files and behavior align with the full `mini_demo.py` + `mini_demo.html` example in this section.
