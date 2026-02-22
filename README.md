@@ -91,8 +91,13 @@ First, download this project's README from GitHub into this empty folder as `pyL
 - Prefer: `curl -fL "https://raw.githubusercontent.com/Snackman8/pyLinkJS_Drawing/main/README.md" -o pyLinkJS_Drawing_readme.md`
 - Fallback: `wget -O pyLinkJS_Drawing_readme.md "https://raw.githubusercontent.com/Snackman8/pyLinkJS_Drawing/main/README.md"`
 
-Then read `pyLinkJS_Drawing_readme.md` in this workspace and follow it as the project spec.
-Match the generated app to the "Minimal End-to-End Example (No CSV)" contract in that file (same structure, naming, handlers, and default behavior).
+Also download pyLinkJS README as `pyLinkJS_readme.md`:
+- URL: https://raw.githubusercontent.com/Snackman8/pyLinkJS/master/README.md
+- Prefer: `curl -fL "https://raw.githubusercontent.com/Snackman8/pyLinkJS/master/README.md" -o pyLinkJS_readme.md`
+- Fallback: `wget -O pyLinkJS_readme.md "https://raw.githubusercontent.com/Snackman8/pyLinkJS/master/README.md"`
+
+Then read both `pyLinkJS_Drawing_readme.md` and `pyLinkJS_readme.md` in this workspace and follow them as the project spec.
+Match the generated app to the "Minimal End-to-End Example (No CSV)" contract in `pyLinkJS_Drawing_readme.md` while using `pyLinkJS_readme.md` for full pyLinkJS capabilities and rules.
 
 Starting from this empty folder:
 1) Create a Python virtual environment named .venv if it does not already exist.
