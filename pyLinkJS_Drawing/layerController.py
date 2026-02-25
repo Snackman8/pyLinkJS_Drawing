@@ -11,6 +11,7 @@ tooltips, options, and datasource status updates) for pyLinkJS canvas clients.
 import concurrent.futures
 import datetime
 import logging
+import math
 import threading
 import time
 import traceback
@@ -284,14 +285,26 @@ class LayerController:
         """
         html = ''
         opts = {}
+        options = []
         for dr in self._layer_datarenderers.values():
-            for opt in dr.get_options():
-                if opt['type'] == 'Boolean':
-                    checked = ''
-                    if opt['default_value']:
-                        checked = 'checked'
-                    html += f"""<input type="checkbox" id="opt_{opt['id']}" name="opt_{opt['id']}" value="{opt['id']}" onclick="call_py('options_changed');" {checked}>{opt['text']}<br>"""
-                    opts[opt['id']] = opt['default_value']
+            options += dr.get_options()
+        options += jsc.tag.get('extra_options', [])
+
+        for opt in options:
+            if opt['type'] == 'Boolean':
+                checked = ''
+                if opt['default_value']:
+                    checked = 'checked'
+                html += f"""<input type="checkbox" id="opt_{opt['id']}" name="opt_{opt['id']}" value="{opt['id']}" onclick="call_py('options_changed');" {checked}>{opt['text']}<br>"""
+                opts[opt['id']] = opt['default_value']
+            elif opt['type'] == 'Number':
+                min_value = opt.get('min_value', 0)
+                max_value = opt.get('max_value', 1)
+                step = opt.get('step', 0.01)
+                default_value = opt.get('default_value', min_value)
+                html += f"""<label for="opt_{opt['id']}">{opt['text']}: <span id="optval_{opt['id']}">{default_value}</span></label><br>"""
+                html += f"""<input type="range" id="opt_{opt['id']}" name="opt_{opt['id']}" min="{min_value}" max="{max_value}" step="{step}" value="{default_value}" oninput="$('#optval_{opt['id']}').text(this.value); call_py('options_changed');"><br>"""
+                opts[opt['id']] = default_value
         jsc.tag['options'] = opts
         return html
 
@@ -354,11 +367,20 @@ class LayerController:
         """
         # read back all of the options
         opts = {}
+        options = []
         for dr in self._layer_datarenderers.values():
-            for opt in dr.get_options():
-                if opt['type'] == 'Boolean':
-                    optval = jsc.eval_js_code(f"""$('#opt_{opt['id']}').is(":checked")""")
-                    opts[opt['id']] = optval
+            options += dr.get_options()
+        options += jsc.tag.get('extra_options', [])
+
+        for opt in options:
+            if opt['type'] == 'Boolean':
+                optval = jsc.eval_js_code(f"""$('#opt_{opt['id']}').is(":checked")""")
+                opts[opt['id']] = optval
+            elif opt['type'] == 'Number':
+                optval = jsc.eval_js_code(f"""parseFloat($('#opt_{opt['id']}').val())""")
+                if (optval is None) or (isinstance(optval, float) and math.isnan(optval)):
+                    optval = opt.get('default_value', 0)
+                opts[opt['id']] = optval
         jsc.tag['options'] = opts
 
     def _thread_worker(self):
@@ -430,12 +452,14 @@ class LayerController:
 
 class LayerApp:
     """High-level app wrapper for interactive layered drawing views."""
-    def __init__(self, data_sources, renderers):
+    def __init__(self, data_sources, renderers, runtime_options=None):
         """Initialize the layer app and register datasources/renderers.
 
         Args:
             data_sources: Iterable of ``LayerDataSource`` instances.
             renderers: Iterable of ``LayerRenderer`` instances.
+            runtime_options: Optional iterable of options displayed in the
+                options panel and tracked in ``jsc.tag['options']``.
 
         Returns:
             None.
@@ -445,6 +469,7 @@ class LayerApp:
               starts controller polling immediately.
         """
         self.layer_controller = LayerController(minimum_datasource_cooldown_period=3)
+        self.runtime_options = [] if runtime_options is None else list(runtime_options)
 
         for lds in data_sources:
             self.layer_controller._layer_datasources[lds.name] = lds
@@ -453,6 +478,25 @@ class LayerApp:
             self.layer_controller._layer_datarenderers[lr.name] = lr
 
         self.layer_controller.start()
+
+    @classmethod
+    def _clamp_opacity(cls, opacity, default=0.2):
+        """Return opacity clamped to ``[0, 1]`` with fallback default."""
+        try:
+            opacity = float(opacity)
+        except Exception:
+            opacity = default
+        return max(0.0, min(1.0, opacity))
+
+    @classmethod
+    def _initial_background_opacity(cls, jsc, default=0.2):
+        """Return startup background opacity from ``extra_settings``/tag."""
+        # Prefer explicit ``background_opacity`` in extra_settings.
+        # Keep ``default_background_opacity`` as backward-compatible fallback.
+        return cls._clamp_opacity(
+            jsc.tag.get('background_opacity', jsc.tag.get('default_background_opacity', default)),
+            default=default
+        )
 
     @classmethod
     def compute_image_scale(cls, w, h):
@@ -558,6 +602,7 @@ class LayerApp:
         """
         # create the render objects list
         f = jsc.drawing()
+        jsc.tag['extra_options'] = self.runtime_options
         f.create_image('img_floor_plan', background_image_path)
         f.render(jsc)
 
@@ -587,18 +632,47 @@ class LayerApp:
         # create the background
         root_obj = RectObject(flightplan=None, x=0, y=0, width=canvas_width, height=canvas_height, strokeStyle='rgba(0, 0, 0, 0)', fillStyle='rgba(0, 0, 0, 0)', clickable=False)
 
-        # create the background
-        image_obj = ImageObject(name='img', flightplan=None, x=0, y=0, width=img_width, height=img_height, image_name='img_floor_plan', filter_str='opacity(0.2)')
+        # add background first
+        initial_opacity = LayerApp._initial_background_opacity(jsc, default=0.2)
+        image_obj = ImageObject(
+            name='img',
+            flightplan=None,
+            x=0,
+            y=0,
+            width=img_width,
+            height=img_height,
+            image_name='img_floor_plan',
+            filter_str=f'opacity({initial_opacity})'
+        )
         root_obj.add_child(image_obj)
+
+        # add overlay container after background so overlay children render on top
+        overlay_obj = RectObject(
+            name='overlay',
+            flightplan=None,
+            x=0,
+            y=0,
+            width=img_width,
+            height=img_height,
+            strokeStyle='rgba(0, 0, 0, 0)',
+            fillStyle='rgba(0, 0, 0, 0)',
+            clickable=False
+        )
+        root_obj.add_child(overlay_obj)
         jsc.tag['ROOT_RENDER_OBJECT'] = root_obj
+        jsc.tag['OVERLAY_RENDER_OBJECT'] = overlay_obj
 
         # initialize the layer renderers for this jsc
         for dr in self.layer_controller._layer_datarenderers.values():
-            dr.layer_init(image_obj)
+            dr.layer_init(overlay_obj)
 
         # generate html for layer selection
         jsc['#options'].html = self.layer_controller.build_options_html(jsc)
         self.layer_controller.update_options(jsc)
+        opacity = LayerApp._clamp_opacity(
+            jsc.tag.get('options', {}).get('background_opacity', LayerApp._initial_background_opacity(jsc, default=0.2))
+        )
+        image_obj.props['filter_str'] = f'opacity({opacity})'
 
         # render
         f.render(jsc)
@@ -637,7 +711,12 @@ class LayerApp:
                         # refresh the render objects associated with the data
                         if 'ROOT_RENDER_OBJECT' in jsc.tag:
                             image_obj = jsc.tag['ROOT_RENDER_OBJECT'].children['img']
-                            self.layer_controller.render(image_obj, jsc.tag.get('options', {}))
+                            overlay_obj = jsc.tag.get('OVERLAY_RENDER_OBJECT', image_obj)
+                            opacity = LayerApp._clamp_opacity(
+                                jsc.tag.get('options', {}).get('background_opacity', LayerApp._initial_background_opacity(jsc, default=0.2))
+                            )
+                            image_obj.props['filter_str'] = f'opacity({opacity})'
+                            self.layer_controller.render(overlay_obj, jsc.tag.get('options', {}))
 
                             f = JSDraw('ctx_drawing', 'ctx_display')
                             f.fillStyle = 'white'

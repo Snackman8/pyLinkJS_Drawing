@@ -414,12 +414,26 @@ def main(args):
     lr_circle = LR_Example_Circle(name='circle', starting_data_dict={'data_coords': df_data_coords}, subscribed_datasources=[lds_data_coords.name, lds_value.name, lds_open.name] )
 
     # initialize the LAYER_APP
-    LAYER_APP = LayerApp(data_sources=[lds_data_coords, lds_value, lds_open], renderers=[lr_text, lr_circle])
+    default_background_opacity=0.5
+#     Alternative (no slider in options panel):
+#     runtime_options = []
+    runtime_options = [
+        {
+            'id': 'background_opacity',
+            'text': 'Background Opacity',
+            'type': 'Number',
+            'default_value': default_background_opacity,
+            'min_value': 0.0,
+            'max_value': 1.0,
+            'step': 0.05,
+        }
+    ]
+    LAYER_APP = LayerApp(data_sources=[lds_data_coords, lds_value, lds_open], renderers=[lr_text, lr_circle], runtime_options=runtime_options)
     LAYER_APP.start()
 
     # initialize the app
     drawing_plugin = pluginDrawing('ctx_drawing', 'ctx_display')
-    run_pylinkjs_app(default_html='pyLinkJS_Drawing_example.html', extra_settings={'background_file': args['background_file'], 'data_coordinates_file': args['data_coordinate_file']}, plugins=[drawing_plugin])
+    run_pylinkjs_app(default_html='pyLinkJS_Drawing_example.html', extra_settings={'background_file': args['background_file'], 'data_coordinates_file': args['data_coordinate_file'], 'background_opacity': default_background_opacity}, plugins=[drawing_plugin])
 
 
 if __name__ == '__main__':

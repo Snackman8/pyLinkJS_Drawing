@@ -19,6 +19,7 @@ HTML5 canvas drawing and layered rendering plugin for `pyLinkJS`.
   - [LayerRenderer](#layerrenderer)
   - [LayerController](#layercontroller)
   - [LayerApp](#layerapp)
+  - [Optional Background Opacity Control](#optional-background-opacity-control)
 - **[Notes and Gotchas](#notes-and-gotchas)**
 - **[LLM Reference (Code Generation Contract)](#llm-reference-code-generation-contract)**
 
@@ -262,6 +263,54 @@ Purpose:
 
 1. `pyLinkJS_Drawing` is designed to be used with `pyLinkJS`; install both packages.
 2. The plugin JavaScript is injected into HTML templates. Avoid Tornado-template markers (`{{`, `}}`, `{%`, `%}`) in injected JS comments/strings.
+
+## Optional Background Opacity Control
+
+Background opacity is optional and can be controlled in three ways.
+
+1. Init-time default (startup, per client) via `extra_settings`:
+
+```python
+default_background_opacity = 0.5
+run_pylinkjs_app(
+    default_html='your_page.html',
+    plugins=[drawing_plugin],
+    extra_settings={
+        'background_file': 'floor_plan.svg',
+        'background_opacity': default_background_opacity,
+    },
+)
+```
+
+2. Runtime programmatic update (from any callback that has `jsc`):
+
+```python
+def some_callback(jsc, *args):
+    opts = jsc.tag.setdefault('options', {})
+    opts['background_opacity'] = 1.0  # or 0.2, etc.
+```
+
+3. Options panel slider via `runtime_options`:
+
+```python
+runtime_options = [
+    {
+        'id': 'background_opacity',
+        'text': 'Background Opacity',
+        'type': 'Number',
+        'default_value': 0.2,
+        'min_value': 0.0,
+        'max_value': 1.0,
+        'step': 0.05,
+    }
+]
+LAYER_APP = LayerApp(data_sources=[...], renderers=[...], runtime_options=runtime_options)
+```
+
+Notes:
+
+- `background_opacity` is clamped to `[0.0, 1.0]`.
+- If both slider and programmatic updates are used, keep the slider UI value in sync; otherwise a later `options_changed` read can overwrite your programmatic value.
 
 ---
 
@@ -512,7 +561,7 @@ Tree operations:
 7. UI events call `onmouseup(...)` and `options_changed(...)`.
 8. Reconnect path calls `reconnect(...)`, which should rebuild client state.
 
-### Minimal End-to-End Example (No CSV)
+### Minimal End-to-End Example
 
 `mini_demo.py`
 
@@ -699,6 +748,15 @@ if __name__ == "__main__":
   </script>
 </body>
 ```
+
+### Optional Minor Feature: Background Opacity
+
+If requested, support background opacity with these patterns:
+
+- Init default: pass `background_opacity` in `extra_settings`.
+- Runtime programmatic update: set `jsc.tag.setdefault('options', {})['background_opacity']`.
+- Options panel: define a `runtime_options` item with `id='background_opacity'`, `type='Number'`.
+- Clamp/validate opacity to `[0.0, 1.0]`.
 
 ### Code Generation Checklist
 
