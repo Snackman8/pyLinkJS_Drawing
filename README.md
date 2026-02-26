@@ -20,6 +20,7 @@ HTML5 canvas drawing and layered rendering plugin for `pyLinkJS`.
   - [LayerController](#layercontroller)
   - [LayerApp](#layerapp)
   - [Optional Background Opacity Control](#optional-background-opacity-control)
+  - [Optional Render Interval Control](#optional-render-interval-control)
 - **[Notes and Gotchas](#notes-and-gotchas)**
 - **[LLM Reference (Code Generation Contract)](#llm-reference-code-generation-contract)**
 
@@ -311,6 +312,37 @@ Notes:
 
 - `background_opacity` is clamped to `[0.0, 1.0]`.
 - If both slider and programmatic updates are used, keep the slider UI value in sync; otherwise a later `options_changed` read can overwrite your programmatic value.
+
+## Optional Render Interval Control
+
+Render interval is optional and can be controlled without adding an options-panel UI.
+
+1. Init-time default (startup, per client) via `extra_settings`:
+
+```python
+default_render_interval_seconds = 0.1
+run_pylinkjs_app(
+    default_html='your_page.html',
+    plugins=[drawing_plugin],
+    extra_settings={
+        'background_file': 'floor_plan.svg',
+        'render_interval_seconds': default_render_interval_seconds,
+    },
+)
+```
+
+2. Runtime programmatic update (from any callback that has `jsc`):
+
+```python
+def some_callback(jsc, *args):
+    jsc.tag['render_interval_seconds'] = 0.2  # ~5 FPS
+    # jsc.tag['render_interval_seconds'] = 0.1  # ~10 FPS
+```
+
+Notes:
+
+- Interval is clamped to `[0.01, 10.0]` seconds.
+- Smaller interval = higher target FPS, larger interval = lower FPS.
 
 ---
 
@@ -757,6 +789,14 @@ If requested, support background opacity with these patterns:
 - Runtime programmatic update: set `jsc.tag.setdefault('options', {})['background_opacity']`.
 - Options panel: define a `runtime_options` item with `id='background_opacity'`, `type='Number'`.
 - Clamp/validate opacity to `[0.0, 1.0]`.
+
+### Optional Minor Feature: Render Interval
+
+If requested, support render interval with these patterns:
+
+- Init default: pass `render_interval_seconds` in `extra_settings`.
+- Runtime programmatic update: set `jsc.tag['render_interval_seconds']`.
+- Clamp/validate interval to a safe range (for example `[0.01, 10.0]` seconds).
 
 ### Code Generation Checklist
 

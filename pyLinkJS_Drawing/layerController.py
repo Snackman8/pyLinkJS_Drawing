@@ -499,6 +499,23 @@ class LayerApp:
         )
 
     @classmethod
+    def _clamp_render_interval(cls, interval_seconds, default=0.1):
+        """Return render interval clamped to a sane range."""
+        try:
+            interval_seconds = float(interval_seconds)
+        except Exception:
+            interval_seconds = default
+        return max(0.01, min(10.0, interval_seconds))
+
+    @classmethod
+    def _initial_render_interval(cls, jsc, default=0.1):
+        """Return startup render interval from ``extra_settings``/tag."""
+        return cls._clamp_render_interval(
+            jsc.tag.get('render_interval_seconds', jsc.tag.get('default_render_interval_seconds', default)),
+            default=default
+        )
+
+    @classmethod
     def compute_image_scale(cls, w, h):
         """Scale image dimensions to fit a 2000-unit max side.
 
@@ -603,6 +620,7 @@ class LayerApp:
         # create the render objects list
         f = jsc.drawing()
         jsc.tag['extra_options'] = self.runtime_options
+        jsc.tag['render_interval_seconds'] = LayerApp._initial_render_interval(jsc, default=0.1)
         f.create_image('img_floor_plan', background_image_path)
         f.render(jsc)
 
@@ -705,8 +723,13 @@ class LayerApp:
 
             try:
                 # refresh the data visually if needed
-                if (t - last_render_refresh_time) > 0.1:
-                    for jsc in get_broadcast_jsclients('/'):
+                for jsc in get_broadcast_jsclients('/'):
+                    render_interval_seconds = LayerApp._clamp_render_interval(
+                        jsc.tag.get('render_interval_seconds', LayerApp._initial_render_interval(jsc, default=0.1)),
+                        default=0.1
+                    )
+                    jsc_last_render_time = jsc.tag.get('_last_render_refresh_time', 0)
+                    if (t - jsc_last_render_time) > render_interval_seconds:
 
                         # refresh the render objects associated with the data
                         if 'ROOT_RENDER_OBJECT' in jsc.tag:
@@ -723,7 +746,8 @@ class LayerApp:
                             f.clear()
                             jsc.tag['ROOT_RENDER_OBJECT'].render(f, t)
                             f.render(jsc)
-                    last_render_refresh_time = time.time()
+                        jsc.tag['_last_render_refresh_time'] = time.time()
+                last_render_refresh_time = time.time()
 
 
                 if (t - last_tooltip_check_time) > 0.1:

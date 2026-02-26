@@ -415,6 +415,7 @@ def main(args):
 
     # initialize the LAYER_APP
     default_background_opacity=0.5
+    default_render_interval_seconds=0.5
 #     Alternative (no slider in options panel):
 #     runtime_options = []
     runtime_options = [
@@ -433,7 +434,11 @@ def main(args):
 
     # initialize the app
     drawing_plugin = pluginDrawing('ctx_drawing', 'ctx_display')
-    run_pylinkjs_app(default_html='pyLinkJS_Drawing_example.html', extra_settings={'background_file': args['background_file'], 'data_coordinates_file': args['data_coordinate_file'], 'background_opacity': default_background_opacity}, plugins=[drawing_plugin])
+    run_pylinkjs_app(default_html='pyLinkJS_Drawing_example.html', extra_settings={'background_file': args['background_file'], 'data_coordinates_file': args['data_coordinate_file'], 'background_opacity': default_background_opacity, 'render_interval_seconds': default_render_interval_seconds}, plugins=[drawing_plugin])
+
+    # Runtime control from any callback with ``jsc`` (no options UI needed):
+    # jsc.tag['render_interval_seconds'] = 0.1   # ~10 FPS
+    # jsc.tag['render_interval_seconds'] = 0.2   # ~5 FPS
 
 
 if __name__ == '__main__':
